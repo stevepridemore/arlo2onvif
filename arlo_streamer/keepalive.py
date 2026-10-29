@@ -104,7 +104,10 @@ async def publish(client, name, command):
 async def supervise(client, states):
     last_bytes = {}
     last_change = {}
-    last_kick = {}
+    # Start the "last kick" clock now so the first blind START (sent before any
+    # status has been seen) waits STALL seconds. Sending it earlier races with
+    # arlo-streamer's own camera start-up, which ends with a forced idle.
+    last_kick = {cam: time.monotonic() for cam in CAMERAS}
 
     while True:
         now = time.monotonic()
