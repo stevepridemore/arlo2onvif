@@ -14,7 +14,8 @@ RUN git clone --depth 1 --branch "${ARLO_STREAMER_REF}" \
  && pip install --no-cache-dir -r /app/requirements.txt
 
 WORKDIR /app
-COPY run.sh keepalive.py /app/
-RUN chmod +x /app/run.sh
+COPY run.sh keepalive.py patch-arlo-streamer.py /app/
+RUN chmod +x /app/run.sh \
+ && python3 /app/patch-arlo-streamer.py /app/camera.py
 
 ENTRYPOINT ["/app/run.sh"]

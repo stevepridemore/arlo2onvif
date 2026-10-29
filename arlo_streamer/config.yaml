@@ -1,5 +1,5 @@
 name: "Arlo Bridge 2 - Streamer"
-version: "1.0.1"
+version: "1.0.2"
 slug: arlo_streamer
 description: "Logs in to Arlo the same way the aarlo integration does, keeps the wired cameras streaming, and publishes them to the RTSP Relay add-on"
 url: "https://github.com/kaffetorsk/arlo-streamer"
