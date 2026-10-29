@@ -31,6 +31,9 @@ RTSP_PORT=$(jq -r '.rtsp_port' "$OPTIONS")
 PORT_BASE=$(jq -r '.onvif_port_base' "$OPTIONS")
 EVENTS_BASE=$(jq -r '.events_port_base // 8181' "$OPTIONS")
 EVENTS_ENABLED=$(jq -r '.events_enabled // true' "$OPTIONS")
+SNAP_ENABLED=$(jq -r '.snapshots_enabled // true' "$OPTIONS")
+SNAP_PORT=$(jq -r '.snapshot_port // 8580' "$OPTIONS")
+SNAP_TARGET_PORT=$(jq -r '.snapshot_target_port // 8581' "$OPTIONS")
 COUNT=$(jq '.cameras | length' "$OPTIONS")
 
 if [ "$COUNT" -eq 0 ]; then
@@ -116,6 +119,11 @@ done
       server: ${port}
       rtsp: ${RTSP_PORT}
 EOF
+        if [ "$SNAP_ENABLED" = "true" ]; then
+            cat <<EOF
+      snapshot: ${SNAP_PORT}
+EOF
+        fi
         if [ "$EVENTS_ENABLED" = "true" ]; then
             cat <<EOF
       events: ${events_port}
@@ -123,11 +131,18 @@ EOF
       source: ${path}
 EOF
         fi
+        snap_line=""
+        snap_target=""
+        if [ "$SNAP_ENABLED" = "true" ]; then
+            snap_line="      snapshot: /${path}.jpg"
+            snap_target="        snapshot: ${SNAP_TARGET_PORT}"
+        fi
         cat <<EOF
     name: "${name}"
     uuid: ${uuid}
     highQuality:
       rtsp: /${path}
+${snap_line}
       width: ${width}
       height: ${height}
       framerate: ${fps}
@@ -135,6 +150,7 @@ EOF
       quality: 4
     lowQuality:
       rtsp: /${path}
+${snap_line}
       width: ${width}
       height: ${height}
       framerate: ${fps}
@@ -144,6 +160,7 @@ EOF
       hostname: ${MTX_HOST}
       ports:
         rtsp: ${MTX_PORT}
+${snap_target}
 EOF
     done
 } > /onvif.yaml

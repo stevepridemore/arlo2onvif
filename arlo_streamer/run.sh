@@ -52,6 +52,13 @@ env = {
     "MOTION_SENSITIVITY": o.get("motion_sensitivity", 50),
     "MOTION_END_SECONDS": o.get("motion_end_seconds", 8),
     "MOTION_DEBUG": str(bool(o.get("motion_debug", False))).lower(),
+    # Snapshot thumbnails (snapshots.py)
+    "SNAPSHOTS": str(bool(o.get("snapshots", True))).lower(),
+    "SNAPSHOT_CAMERAS": ",".join(o["cameras"]),
+    "SNAPSHOT_RTSP_URL": publish,
+    "SNAPSHOT_INTERVAL": o.get("snapshot_interval", 10),
+    "SNAPSHOT_PORT": 8580,
+    "SNAPSHOT_DIR": "/tmp/snapshots",
 }
 for key, value in env.items():
     # Leave MQTT auth unset (not empty) so arlo-streamer connects anonymously.
@@ -82,6 +89,12 @@ PIDS=("$MAIN_PID" "$KEEP_PID")
 if [ "${VIDEO_MOTION}" = "true" ]; then
     echo "Starting video motion detection (sensitivity ${MOTION_SENSITIVITY}, topic ${MOTION_TOPIC})"
     python3 motion.py &
+    PIDS+=("$!")
+fi
+
+if [ "${SNAPSHOTS}" = "true" ]; then
+    echo "Starting snapshot thumbnails (every ${SNAPSHOT_INTERVAL}s, port ${SNAPSHOT_PORT})"
+    python3 snapshots.py &
     PIDS+=("$!")
 fi
 

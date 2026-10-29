@@ -1,5 +1,5 @@
 name: "Arlo Bridge 2 - Streamer"
-version: "1.1.3"
+version: "1.2.0"
 slug: arlo_streamer
 description: "Logs in to Arlo the same way the aarlo integration does, keeps the wired cameras streaming, and publishes them to the RTSP Relay add-on"
 url: "https://github.com/kaffetorsk/arlo-streamer"
@@ -10,6 +10,10 @@ startup: application
 boot: auto
 services:
   - mqtt:want
+ports:
+  8580/tcp: 8581
+ports_description:
+  8580/tcp: "Snapshot JPEGs (exposed on the LAN as 8581; the ONVIF add-on proxies it as 8580 on each virtual camera)"
 options:
   arlo_user: ""
   arlo_pass: ""
@@ -31,6 +35,8 @@ options:
   motion_sensitivity: 50
   motion_end_seconds: 8
   motion_debug: false
+  snapshots: true
+  snapshot_interval: 10
   keepalive_interval: 30
   stall_seconds: 120
   status_interval: 30
@@ -59,6 +65,8 @@ schema:
   motion_sensitivity: int(1,100)
   motion_end_seconds: int(1,300)
   motion_debug: bool
+  snapshots: bool
+  snapshot_interval: int(2,300)
   keepalive_interval: int(5,600)
   stall_seconds: int(30,3600)
   status_interval: int(10,600)

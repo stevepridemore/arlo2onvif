@@ -1,5 +1,5 @@
 name: "Arlo Bridge 3 - Virtual ONVIF Cameras"
-version: "1.0.4"
+version: "1.0.5"
 slug: arlo_onvif_proxy
 description: "Presents each relayed Arlo stream as its own virtual ONVIF camera (own MAC and IP) so UniFi Protect can adopt it"
 url: "https://github.com/daniela-hase/onvif-server"
@@ -26,6 +26,9 @@ options:
   mediamtx_rtsp_port: 8555
   rtsp_port: 8554
   onvif_port_base: 8081
+  snapshots_enabled: true
+  snapshot_port: 8580
+  snapshot_target_port: 8581
   events_enabled: true
   events_port_base: 8181
   mqtt_host: 192.168.40.7
@@ -70,6 +73,9 @@ schema:
   mediamtx_rtsp_port: port
   rtsp_port: port
   onvif_port_base: port
+  snapshots_enabled: bool
+  snapshot_port: port
+  snapshot_target_port: port
   events_enabled: bool
   events_port_base: port
   mqtt_host: str

@@ -13,10 +13,11 @@ the G5 Bullet.
  │                                                                            │
  │  [2] Streamer ──── ffmpeg ────► [1] RTSP relay ────► [3] Virtual ONVIF     │
  │   pyaarlo, keepalive,            MediaMTX :8555        cameras             │
- │   motion detector                API :9997             192.168.40.41/42/43 │
- │        │                             ▲                 ONVIF :8081-8083    │
- │        │ reads 1 frame/s ────────────┘                 events :8181-8183   │
- │        │                                               RTSP proxy :8554    │
+ │   motion detector,               API :9997             192.168.40.41/42/43 │
+ │   snapshots :8581 ◄──────────────────────────────────  ONVIF :8081-8083    │
+ │        │                             ▲                 events :8181-8183   │
+ │        │ reads 1 frame/s ────────────┘                 RTSP proxy :8554    │
+ │        │                                               snapshot proxy :8580│
  │        ▼                                                     ▲             │
  │     Mosquitto (MQTT) ── bridge/motion/<cam>, arlo/motion/<cam> ┘             │
  │       keepalive START/STOP on arlo/control/<cam>                            │
@@ -130,6 +131,7 @@ Defaults are set for this network. Check these before starting:
 | `parent_interface` | empty (auto) | The box's LAN interface, detected from the default route. Set it only if the log says it could not detect one. |
 | `mediamtx_host` / `mediamtx_rtsp_port` | `192.168.40.7` / `8555` | The relay. |
 | `events_enabled` / `events_port_base` | `true` / `8181` | ONVIF Events service, one port per camera (8181, 8182, 8183). This is how Protect gets motion; see below. |
+| `snapshots_enabled` / `snapshot_port` / `snapshot_target_port` | `true` / `8580` / `8581` | Advertise a real snapshot image per camera (served by the Streamer on LAN port 8581) instead of the placeholder logo, proxied on each virtual IP as port 8580. |
 | `mqtt_host` / `mqtt_port` / `mqtt_user` / `mqtt_pass` | `192.168.40.7` / `1883` | Mosquitto, by the box's LAN IP (this add-on runs on the host network, so `core-mosquitto` does not resolve). Same `arlo_bridge` user as the Streamer. |
 | `mqtt_motion_topic` | `bridge/motion/{name},arlo/motion/{name}` | Motion sources, comma-separated; `{name}` is the camera `path`. The first is the Streamer's video detector, the second arlo-streamer's relay of Arlo's own events (silent while streaming). Motion is reported while any source says so. |
 | `motion_hold_seconds` | `90` | If Arlo never sends "motion ended", clear it after this long. |
@@ -200,6 +202,7 @@ Tuning, in the Streamer options:
 | `motion_sensitivity` | `50` | 1 to 100. 50 fires when about 5% of the frame changes between keyframes; 90 at about 1.5%; 10 at about 9%. Raise it if people walking at a distance are missed, lower it if the porch fan or swaying branches trigger it. |
 | `motion_end_seconds` | `8` | Stillness before motion is reported ended. |
 | `motion_debug` | `false` | Log the change percentage of every frame, to pick a sensitivity. |
+| `snapshots` / `snapshot_interval` | `true` / `10` | Keep a JPEG of the latest keyframe per camera, refreshed every N seconds, served on LAN port 8581 as `/<camera>.jpg`. Protect and Home Assistant use it for camera tiles and event thumbnails; without it they show the "Virtual ONVIF" logo. |
 
 A whole-frame change (more than 70% of pixels, such as an infrared switch at
 dusk) is ignored rather than reported as motion.
@@ -244,6 +247,7 @@ log); if it never does, re-adopt the camera while the add-on is running.
 | Virtual interfaces missing after a reboot | The add-on recreates them every start. If it is not starting on boot, enable Start on boot. |
 | No motion in Protect | Streamer log: does "motion started" appear when someone walks past? If not, raise `motion_sensitivity` or turn on `motion_debug` to see the change percentages. If the Streamer sees it but the ONVIF log does not, check both add-ons' MQTT settings and that `mqtt_motion_topic` includes `bridge/motion/{name}`. If the ONVIF log sees it but Protect shows nothing, re-adopt the camera, then try `emit_motion_alarm: true`. |
 | Motion fires constantly on one camera | Lower `motion_sensitivity` for now (it is global); the porch fan and swaying branches are the usual causes. Per-camera zones are not implemented. |
+| Camera tiles show a "Virtual ONVIF" logo instead of a picture | Snapshots are off or not reaching Protect. Check `http://192.168.40.7:8581/` lists the cameras with recent times, that the Streamer is on 1.2.0+ and the ONVIF add-on on 1.0.5+, then re-adopt the camera so Protect re-reads the snapshot URL. |
 | Motion in Protect never ends | Arlo did not send "motion ended"; `motion_hold_seconds` clears it. Lower it if clips run long. |
 
 ## Removing it
