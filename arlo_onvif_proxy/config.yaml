@@ -1,5 +1,5 @@
 name: "Arlo Bridge 3 - Virtual ONVIF Cameras"
-version: "1.0.3"
+version: "1.0.4"
 slug: arlo_onvif_proxy
 description: "Presents each relayed Arlo stream as its own virtual ONVIF camera (own MAC and IP) so UniFi Protect can adopt it"
 url: "https://github.com/daniela-hase/onvif-server"
@@ -32,7 +32,7 @@ options:
   mqtt_port: 1883
   mqtt_user: ""
   mqtt_pass: ""
-  mqtt_motion_topic: "arlo/motion/{name}"
+  mqtt_motion_topic: "bridge/motion/{name},arlo/motion/{name}"
   motion_hold_seconds: 90
   emit_motion_alarm: false
   debug: false

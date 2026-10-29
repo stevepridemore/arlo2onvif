@@ -1,5 +1,5 @@
 name: "Arlo Bridge 2 - Streamer"
-version: "1.0.2"
+version: "1.1.0"
 slug: arlo_streamer
 description: "Logs in to Arlo the same way the aarlo integration does, keeps the wired cameras streaming, and publishes them to the RTSP Relay add-on"
 url: "https://github.com/kaffetorsk/arlo-streamer"
@@ -26,6 +26,11 @@ options:
     - front_door
     - front_yard
     - back_yard
+  video_motion: true
+  motion_topic: "bridge/motion/{name}"
+  motion_sensitivity: 50
+  motion_end_seconds: 8
+  motion_debug: false
   keepalive_interval: 30
   stall_seconds: 120
   status_interval: 30
@@ -49,6 +54,11 @@ schema:
   mediamtx_api_url: str
   cameras:
     - str
+  video_motion: bool
+  motion_topic: str
+  motion_sensitivity: int(1,100)
+  motion_end_seconds: int(1,300)
+  motion_debug: bool
   keepalive_interval: int(5,600)
   stall_seconds: int(30,3600)
   status_interval: int(10,600)

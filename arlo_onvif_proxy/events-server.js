@@ -92,29 +92,37 @@ class MotionSource {
      * @param {string} opts.url        mqtt://host:port
      * @param {string} [opts.username]
      * @param {string} [opts.password]
-     * @param {string} opts.topic      e.g. "arlo/motion/{name}"
+     * @param {string[]} opts.topics   e.g. ["bridge/motion/{name}", "arlo/motion/{name}"];
+     *                                 a camera is in motion while ANY source says so
      * @param {number} opts.holdSeconds  auto-clear if no "false" arrives
      * @param {object} opts.logger
      */
     constructor(opts) {
         this.opts = opts;
         this.logger = opts.logger;
-        this.states = new Map();     // name -> boolean
+        this.topics = (opts.topics || []).filter((t) => t.includes('{name}'));
+        this.states = new Map();     // name -> boolean (combined)
+        this.sources = new Map();    // name -> Map<topicTemplate, boolean>
         this.listeners = new Map();  // name -> Set<fn(bool)>
         this.holdTimers = new Map();
         this.client = null;
     }
 
-    topicFor(name) {
-        return this.opts.topic.replace('{name}', name);
+    topicFor(template, name) {
+        return template.replace('{name}', name);
     }
 
-    nameFromTopic(topic) {
-        const [prefix, suffix] = this.opts.topic.split('{name}');
-        if (!topic.startsWith(prefix)) return null;
-        const rest = topic.slice(prefix.length);
-        if (suffix && !rest.endsWith(suffix)) return null;
-        return suffix ? rest.slice(0, -suffix.length) : rest;
+    /** Returns [template, cameraName] for a received topic, or null. */
+    matchTopic(topic) {
+        for (const template of this.topics) {
+            const [prefix, suffix] = template.split('{name}');
+            if (!topic.startsWith(prefix)) continue;
+            const rest = topic.slice(prefix.length);
+            if (suffix && !rest.endsWith(suffix)) continue;
+            const name = suffix ? rest.slice(0, -suffix.length) : rest;
+            if (name && !name.includes('/')) return [template, name];
+        }
+        return null;
     }
 
     connect() {
@@ -127,10 +135,13 @@ class MotionSource {
         });
         this.client.on('connect', () => {
             this.logger.info(`MQTT connected to ${url}`);
-            this.client.subscribe(this.topicFor('+'), (err) => {
-                if (err) this.logger.error(`MQTT subscribe failed: ${err.message}`);
-                else this.logger.info(`MQTT subscribed to ${this.topicFor('+')}`);
-            });
+            for (const template of this.topics) {
+                const filter = this.topicFor(template, '+');
+                this.client.subscribe(filter, (err) => {
+                    if (err) this.logger.error(`MQTT subscribe failed for ${filter}: ${err.message}`);
+                    else this.logger.info(`MQTT subscribed to ${filter}`);
+                });
+            }
         });
         this.client.on('error', (err) => this.logger.warn(`MQTT error: ${err.message}`));
         this.client.on('offline', () => this.logger.warn('MQTT offline; reconnecting'));
@@ -138,8 +149,9 @@ class MotionSource {
     }
 
     onMessage(topic, payload) {
-        const name = this.nameFromTopic(topic);
-        if (!name) return;
+        const match = this.matchTopic(topic);
+        if (!match) return;
+        const [template, name] = match;
         const text = payload.trim().toLowerCase();
         let value;
         if (['true', '1', 'on', 'yes'].includes(text)) value = true;
@@ -147,7 +159,12 @@ class MotionSource {
         else {
             try { value = Boolean(JSON.parse(payload)); } catch { return; }
         }
-        this.setState(name, value);
+        if (!this.sources.has(name)) this.sources.set(name, new Map());
+        this.sources.get(name).set(template, value);
+        // Combined state: motion while any source reports it.
+        let combined = false;
+        for (const v of this.sources.get(name).values()) combined = combined || v;
+        this.setState(name, combined);
     }
 
     setState(name, value) {
@@ -158,11 +175,15 @@ class MotionSource {
         if (value && this.opts.holdSeconds > 0) {
             this.holdTimers.set(name, setTimeout(() => {
                 this.logger.info(`${name}: motion hold expired after ${this.opts.holdSeconds}s, clearing`);
+                if (this.sources.has(name)) {
+                    for (const key of this.sources.get(name).keys()) this.sources.get(name).set(key, false);
+                }
                 this.setState(name, false);
             }, this.opts.holdSeconds * 1000));
         }
 
         if (previous === value) return;
+        if (previous === undefined && !value) return;  // initial retained "false": nothing to report
         this.logger.info(`${name}: motion ${value ? 'started' : 'ended'}`);
         for (const fn of this.listeners.get(name) || []) fn(value);
     }

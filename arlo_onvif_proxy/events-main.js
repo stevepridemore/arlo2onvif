@@ -6,7 +6,9 @@
  * Environment:
  *   EVENTS_MQTT_URL        mqtt://host:1883
  *   EVENTS_MQTT_USER / EVENTS_MQTT_PASS   optional
- *   EVENTS_MQTT_TOPIC      default arlo/motion/{name}
+ *   EVENTS_MQTT_TOPIC      comma-separated templates, default
+ *                          "bridge/motion/{name},arlo/motion/{name}";
+ *                          a camera is in motion while any of them says so
  *   EVENTS_MOTION_HOLD     seconds before a "true" auto-clears (default 90)
  *   EVENTS_EMIT_MOTION_ALARM   "true" to also send tns1:VideoSource/MotionAlarm
  *   EVENTS_DEBUG           "true" for per-request logging
@@ -56,7 +58,8 @@ const motion = new MotionSource({
     url: process.env.EVENTS_MQTT_URL,
     username: process.env.EVENTS_MQTT_USER || '',
     password: process.env.EVENTS_MQTT_PASS || '',
-    topic: process.env.EVENTS_MQTT_TOPIC || 'arlo/motion/{name}',
+    topics: (process.env.EVENTS_MQTT_TOPIC || 'bridge/motion/{name},arlo/motion/{name}')
+        .split(',').map((t) => t.trim()).filter(Boolean),
     holdSeconds: parseInt(process.env.EVENTS_MOTION_HOLD || '90', 10) || 0,
     logger,
 });

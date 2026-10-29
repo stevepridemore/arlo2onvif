@@ -42,7 +42,7 @@ fi
 export EVENTS_MQTT_URL="mqtt://$(jq -r '.mqtt_host' "$OPTIONS"):$(jq -r '.mqtt_port // 1883' "$OPTIONS")"
 export EVENTS_MQTT_USER=$(jq -r '.mqtt_user // ""' "$OPTIONS")
 export EVENTS_MQTT_PASS=$(jq -r '.mqtt_pass // ""' "$OPTIONS")
-export EVENTS_MQTT_TOPIC=$(jq -r '.mqtt_motion_topic // "arlo/motion/{name}"' "$OPTIONS")
+export EVENTS_MQTT_TOPIC=$(jq -r '.mqtt_motion_topic // "bridge/motion/{name},arlo/motion/{name}"' "$OPTIONS")
 export EVENTS_MOTION_HOLD=$(jq -r '.motion_hold_seconds // 90' "$OPTIONS")
 export EVENTS_EMIT_MOTION_ALARM=$(jq -r '.emit_motion_alarm // false' "$OPTIONS")
 export EVENTS_DEBUG=$(jq -r '.debug // false' "$OPTIONS")

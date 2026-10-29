@@ -44,6 +44,14 @@ env = {
     "KEEPALIVE_INTERVAL": o["keepalive_interval"],
     "STALL_SECONDS": o["stall_seconds"],
     "MEDIAMTX_API_URL": o["mediamtx_api_url"],
+    # Video motion detection (motion.py)
+    "VIDEO_MOTION": str(bool(o.get("video_motion", True))).lower(),
+    "MOTION_CAMERAS": ",".join(o["cameras"]),
+    "MOTION_RTSP_URL": publish,
+    "MOTION_TOPIC": o.get("motion_topic") or "bridge/motion/{name}",
+    "MOTION_SENSITIVITY": o.get("motion_sensitivity", 50),
+    "MOTION_END_SECONDS": o.get("motion_end_seconds", 8),
+    "MOTION_DEBUG": str(bool(o.get("motion_debug", False))).lower(),
 }
 for key, value in env.items():
     # Leave MQTT auth unset (not empty) so arlo-streamer connects anonymously.
@@ -69,17 +77,24 @@ MAIN_PID=$!
 echo "Starting keepalive for cameras: ${KEEPALIVE_CAMERAS}"
 python3 keepalive.py &
 KEEP_PID=$!
+PIDS=("$MAIN_PID" "$KEEP_PID")
+
+if [ "${VIDEO_MOTION}" = "true" ]; then
+    echo "Starting video motion detection (sensitivity ${MOTION_SENSITIVITY}, topic ${MOTION_TOPIC})"
+    python3 motion.py &
+    PIDS+=("$!")
+fi
 
 shutdown() {
     echo "Stopping..."
-    kill -TERM "$MAIN_PID" "$KEEP_PID" 2>/dev/null || true
-    wait "$MAIN_PID" "$KEEP_PID" 2>/dev/null || true
+    kill -TERM "${PIDS[@]}" 2>/dev/null || true
+    wait "${PIDS[@]}" 2>/dev/null || true
     exit 0
 }
 trap shutdown TERM INT
 
-# If either process dies, exit non-zero so the Supervisor watchdog restarts us.
-wait -n "$MAIN_PID" "$KEEP_PID"
+# If any process dies, exit non-zero so the Supervisor watchdog restarts us.
+wait -n "${PIDS[@]}"
 echo "A child process exited unexpectedly; shutting down." >&2
-kill -TERM "$MAIN_PID" "$KEEP_PID" 2>/dev/null || true
+kill -TERM "${PIDS[@]}" 2>/dev/null || true
 exit 1

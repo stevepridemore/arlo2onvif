@@ -118,7 +118,7 @@ Defaults are set for this network. Check these before starting:
 | `mediamtx_host` / `mediamtx_rtsp_port` | `192.168.40.7` / `8555` | The relay. |
 | `events_enabled` / `events_port_base` | `true` / `8181` | ONVIF Events service, one port per camera (8181, 8182, 8183). This is how Protect gets motion; see below. |
 | `mqtt_host` / `mqtt_port` / `mqtt_user` / `mqtt_pass` | `192.168.40.7` / `1883` | Mosquitto, by the box's LAN IP (this add-on runs on the host network, so `core-mosquitto` does not resolve). Same `arlo_bridge` user as the Streamer. |
-| `mqtt_motion_topic` | `arlo/motion/{name}` | Where the Streamer publishes motion; `{name}` is the camera `path`. |
+| `mqtt_motion_topic` | `bridge/motion/{name},arlo/motion/{name}` | Motion sources, comma-separated; `{name}` is the camera `path`. The first is the Streamer's video detector, the second arlo-streamer's relay of Arlo's own events (silent while streaming). Motion is reported while any source says so. |
 | `motion_hold_seconds` | `90` | If Arlo never sends "motion ended", clear it after this long. |
 | `emit_motion_alarm` | `false` | Also send the older `tns1:VideoSource/MotionAlarm` topic. Try it only if Protect ignores the default `RuleEngine/CellMotionDetector/Motion` topic. |
 | `cameras[].ip` | `.41`, `.42`, `.43` | Must be outside the UniFi DHCP pool (which starts at `.51`) and unused. |
@@ -160,19 +160,42 @@ already, but it stops UniFi flagging them.
 Since Protect 7.1, Protect takes motion for third-party cameras from the
 camera's own ONVIF Events service and does no motion detection of its own
 on the video. The bridge therefore runs an Events service per virtual
-camera. When Arlo detects motion, the Streamer publishes it on
-`arlo/motion/<camera>`, the ONVIF add-on turns that into the standard
-`tns1:RuleEngine/CellMotionDetector/Motion` property event (the same shape
-Hikvision cameras send, which Protect is known to accept), and Protect marks
-the timeline, records in Detections mode, and can raise alarms. Smart
+camera, which turns motion messages on MQTT into the standard
+`tns1:RuleEngine/CellMotionDetector/Motion` property event (the shape
+Hikvision cameras send, which Protect accepts). Protect then marks the
+timeline, records in Detections mode, and can raise alarms. Smart
 detections (person, vehicle) are not passed through; Protect ignores them
 from third-party cameras.
 
-To check it is flowing, watch the ONVIF add-on log while someone walks past
-a camera: you should see "front_door: motion started" when Arlo reports it
-and a subscription line from Protect's address (192.168.40.1) shortly after
-adoption. If Protect never subscribes, re-adopt the camera after the add-on
-is up, so Protect sees the Events capability.
+**Where the motion comes from.** Not from Arlo. Arlo pauses a camera's
+motion detection for as long as that camera is live streaming, and the
+bridge streams continuously, so Arlo never reports motion on these cameras
+(this was confirmed against Home Assistant's history on first deployment).
+The Streamer therefore detects motion itself (`motion.py`): for each camera
+it reads the relay's stream with ffmpeg, keyframes only, shrinks each frame
+to 64x36 greyscale, and compares consecutive frames. When enough pixels
+change it publishes `true` on `bridge/motion/<camera>`; after
+`motion_end_seconds` of stillness it publishes `false`. The ONVIF add-on
+listens on both `bridge/motion/<camera>` and arlo-streamer's
+`arlo/motion/<camera>` and reports motion while either says so.
+
+Tuning, in the Streamer options:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `video_motion` | `true` | Run the detector. |
+| `motion_sensitivity` | `50` | 1 to 100. 50 fires when about 5% of the frame changes between keyframes; 90 at about 1.5%; 10 at about 9%. Raise it if people walking at a distance are missed, lower it if the porch fan or swaying branches trigger it. |
+| `motion_end_seconds` | `8` | Stillness before motion is reported ended. |
+| `motion_debug` | `false` | Log the change percentage of every frame, to pick a sensitivity. |
+
+A whole-frame change (more than 70% of pixels, such as an infrared switch at
+dusk) is ignored rather than reported as motion.
+
+To check it is flowing, watch the Streamer log for "front_door: motion
+started" when someone walks past, then the ONVIF add-on log for the same,
+then the Protect timeline. Protect subscribes to events shortly after
+adoption (a "subscription ... created" line from 192.168.40.1 in the ONVIF
+log); if it never does, re-adopt the camera while the add-on is running.
 
 ## What to expect
 
@@ -206,7 +229,8 @@ is up, so Protect sees the Events capability.
 | Protect shows a few seconds of video then "offline", repeatedly | Streamer older than 1.0.2 (timestamp jumps from Arlo's relay). Update it. |
 | The add-on store does not offer an update you know exists | Add-on Store > three dots > Check for updates. If that reports an error, the Supervisor was busy (often building another add-on); wait a minute and try again. |
 | Virtual interfaces missing after a reboot | The add-on recreates them every start. If it is not starting on boot, enable Start on boot. |
-| No motion in Protect | ONVIF add-on log: is "MQTT connected" there, and does "motion started" appear when the Arlo app shows motion? If MQTT is fine but Protect shows nothing, re-adopt the camera, then try `emit_motion_alarm: true`. |
+| No motion in Protect | Streamer log: does "motion started" appear when someone walks past? If not, raise `motion_sensitivity` or turn on `motion_debug` to see the change percentages. If the Streamer sees it but the ONVIF log does not, check both add-ons' MQTT settings and that `mqtt_motion_topic` includes `bridge/motion/{name}`. If the ONVIF log sees it but Protect shows nothing, re-adopt the camera, then try `emit_motion_alarm: true`. |
+| Motion fires constantly on one camera | Lower `motion_sensitivity` for now (it is global); the porch fan and swaying branches are the usual causes. Per-camera zones are not implemented. |
 | Motion in Protect never ends | Arlo did not send "motion ended"; `motion_hold_seconds` clears it. Lower it if clips run long. |
 
 ## Removing it
