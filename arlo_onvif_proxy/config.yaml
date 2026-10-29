@@ -19,6 +19,16 @@ options:
   mediamtx_rtsp_port: 8555
   rtsp_port: 8554
   onvif_port_base: 8081
+  events_enabled: true
+  events_port_base: 8181
+  mqtt_host: 192.168.40.7
+  mqtt_port: 1883
+  mqtt_user: ""
+  mqtt_pass: ""
+  mqtt_motion_topic: "arlo/motion/{name}"
+  motion_hold_seconds: 90
+  emit_motion_alarm: false
+  debug: false
   cameras:
     - name: Arlo Front Door
       path: front_door
@@ -53,6 +63,16 @@ schema:
   mediamtx_rtsp_port: port
   rtsp_port: port
   onvif_port_base: port
+  events_enabled: bool
+  events_port_base: port
+  mqtt_host: str
+  mqtt_port: port
+  mqtt_user: str?
+  mqtt_pass: password?
+  mqtt_motion_topic: str
+  motion_hold_seconds: int(0,3600)
+  emit_motion_alarm: bool
+  debug: bool
   cameras:
     - name: str
       path: str

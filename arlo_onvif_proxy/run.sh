@@ -4,8 +4,8 @@
 # 1. Creates one macvlan interface per camera on the host's LAN interface,
 #    each with its own MAC and IP, so UniFi Protect sees separate devices.
 # 2. Generates /onvif.yaml from the add-on options.
-# 3. Runs onvif-server, which answers ONVIF discovery on each virtual IP and
-#    proxies RTSP to the MediaMTX relay.
+# 3. Runs onvif-server (device + media services, RTSP proxy to the relay)
+#    and the ONVIF Events service (motion from Arlo over MQTT) side by side.
 set -euo pipefail
 
 OPTIONS=/data/options.json
@@ -29,6 +29,8 @@ MTX_HOST=$(jq -r '.mediamtx_host' "$OPTIONS")
 MTX_PORT=$(jq -r '.mediamtx_rtsp_port' "$OPTIONS")
 RTSP_PORT=$(jq -r '.rtsp_port' "$OPTIONS")
 PORT_BASE=$(jq -r '.onvif_port_base' "$OPTIONS")
+EVENTS_BASE=$(jq -r '.events_port_base // 8181' "$OPTIONS")
+EVENTS_ENABLED=$(jq -r '.events_enabled // true' "$OPTIONS")
 COUNT=$(jq '.cameras | length' "$OPTIONS")
 
 if [ "$COUNT" -eq 0 ]; then
@@ -36,7 +38,16 @@ if [ "$COUNT" -eq 0 ]; then
     exit 1
 fi
 
-echo "Parent interface: $PARENT (/$PREFIX); relay: ${MTX_HOST}:${MTX_PORT}; ${COUNT} camera(s)"
+# MQTT settings for the events service (motion source).
+export EVENTS_MQTT_URL="mqtt://$(jq -r '.mqtt_host' "$OPTIONS"):$(jq -r '.mqtt_port // 1883' "$OPTIONS")"
+export EVENTS_MQTT_USER=$(jq -r '.mqtt_user // ""' "$OPTIONS")
+export EVENTS_MQTT_PASS=$(jq -r '.mqtt_pass // ""' "$OPTIONS")
+export EVENTS_MQTT_TOPIC=$(jq -r '.mqtt_motion_topic // "arlo/motion/{name}"' "$OPTIONS")
+export EVENTS_MOTION_HOLD=$(jq -r '.motion_hold_seconds // 90' "$OPTIONS")
+export EVENTS_EMIT_MOTION_ALARM=$(jq -r '.emit_motion_alarm // false' "$OPTIONS")
+export EVENTS_DEBUG=$(jq -r '.debug // false' "$OPTIONS")
+
+echo "Parent interface: $PARENT (/$PREFIX); relay: ${MTX_HOST}:${MTX_PORT}; ${COUNT} camera(s); events: ${EVENTS_ENABLED}"
 
 # Make each virtual MAC answer ARP only for its own IP. Without this, Protect
 # can see the host's MAC for every camera and merge them into one.
@@ -45,7 +56,12 @@ if ! sysctl -w net.ipv4.conf.all.arp_ignore=1 net.ipv4.conf.all.arp_announce=2 >
 fi
 
 LINKS=()
+PIDS=()
 cleanup() {
+    echo "Stopping..."
+    for pid in "${PIDS[@]:-}"; do
+        [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
+    done
     echo "Removing virtual interfaces..."
     for link in "${LINKS[@]:-}"; do
         [ -n "$link" ] && ip link del "$link" 2>/dev/null || true
@@ -81,11 +97,21 @@ done
         fps=$(jq -r ".cameras[$i].framerate" "$OPTIONS")
         bitrate=$(jq -r ".cameras[$i].bitrate" "$OPTIONS")
         port=$((PORT_BASE + i))
+        events_port=$((EVENTS_BASE + i))
         cat <<EOF
   - mac: "${mac}"
     ports:
       server: ${port}
       rtsp: ${RTSP_PORT}
+EOF
+        if [ "$EVENTS_ENABLED" = "true" ]; then
+            cat <<EOF
+      events: ${events_port}
+    events:
+      source: ${path}
+EOF
+        fi
+        cat <<EOF
     name: "${name}"
     uuid: ${uuid}
     highQuality:
@@ -113,7 +139,15 @@ EOF
 # --- 3. Run ------------------------------------------------------------------
 cd /app
 node main.js /onvif.yaml &
-NODE_PID=$!
-wait "$NODE_PID" || true
+PIDS+=("$!")
+
+if [ "$EVENTS_ENABLED" = "true" ]; then
+    node events-main.js /onvif.yaml &
+    PIDS+=("$!")
+fi
+
+# If any process dies, stop everything so the Supervisor watchdog restarts us.
+wait -n "${PIDS[@]}" || true
+echo "A process exited unexpectedly; shutting down." >&2
 cleanup
 exit 1

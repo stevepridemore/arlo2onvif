@@ -9,8 +9,9 @@ the G5 Bullet.
 Arlo cloud ──(pyaarlo login, same as the aarlo integration)──┐
                                                              ▼
   [2] Streamer ── ffmpeg ──► [1] RTSP Relay (MediaMTX) ──► [3] Virtual ONVIF cameras
-        ▲  keepalive via MQTT         :8555                    192.168.40.41/.42/.43
-        └── Mosquitto                                            │ ONVIF + RTSP :8554
+        │  motion + keepalive          :8555                    192.168.40.41/.42/.43
+        └── Mosquitto ── arlo/motion/<cam> ──────────────────────┤ ONVIF + RTSP :8554
+                                                                 │ ONVIF Events :8181+
                                                                  ▼
                                                           UniFi Protect (UDM SE)
 ```
@@ -19,7 +20,7 @@ Arlo cloud ──(pyaarlo login, same as the aarlo integration)──┐
 |---|---|---|
 | `arlo_mediamtx` | Arlo Bridge 1 - RTSP Relay | MediaMTX. Receives the streams, serves plain RTSP on port 8555. |
 | `arlo_streamer` | Arlo Bridge 2 - Streamer | arlo-streamer (pyaarlo + ffmpeg) plus a keepalive that holds the wired cameras in continuous streaming and restarts a stalled stream. |
-| `arlo_onvif_proxy` | Arlo Bridge 3 - Virtual ONVIF Cameras | onvif-server. One macvlan interface per camera with its own MAC and IP, ONVIF discovery, RTSP proxy to the relay. |
+| `arlo_onvif_proxy` | Arlo Bridge 3 - Virtual ONVIF Cameras | onvif-server. One macvlan interface per camera with its own MAC and IP, ONVIF discovery, RTSP proxy to the relay, plus an ONVIF Events service that turns Arlo's own motion detection (via MQTT) into standard camera motion events for Protect. |
 
 Everything stays on the Home Assistant box. Nothing is exposed to the
 internet. The virtual cameras are reachable only on the LAN.
@@ -111,6 +112,11 @@ Defaults are set for this network. Check these before starting:
 |---|---|---|
 | `parent_interface` | empty (auto) | The box's LAN interface, detected from the default route. Set it only if the log says it could not detect one. |
 | `mediamtx_host` / `mediamtx_rtsp_port` | `192.168.40.7` / `8555` | The relay. |
+| `events_enabled` / `events_port_base` | `true` / `8181` | ONVIF Events service, one port per camera (8181, 8182, 8183). This is how Protect gets motion; see below. |
+| `mqtt_host` / `mqtt_port` / `mqtt_user` / `mqtt_pass` | `192.168.40.7` / `1883` | Mosquitto, by the box's LAN IP (this add-on runs on the host network, so `core-mosquitto` does not resolve). Same `arlo_bridge` user as the Streamer. |
+| `mqtt_motion_topic` | `arlo/motion/{name}` | Where the Streamer publishes motion; `{name}` is the camera `path`. |
+| `motion_hold_seconds` | `90` | If Arlo never sends "motion ended", clear it after this long. |
+| `emit_motion_alarm` | `false` | Also send the older `tns1:VideoSource/MotionAlarm` topic. Try it only if Protect ignores the default `RuleEngine/CellMotionDetector/Motion` topic. |
 | `cameras[].ip` | `.41`, `.42`, `.43` | Must be outside the UniFi DHCP pool (which starts at `.51`) and unused. |
 | `cameras[].mac` | `a2:a2:a2:a2:a2:a1` to `a3` | Locally administered MACs. Change only if they collide with something. |
 | `cameras[].path` | `front_door` ... | Must match the Streamer's camera names. |
@@ -118,8 +124,9 @@ Defaults are set for this network. Check these before starting:
 
 Start it. The log should show each `onvifN` interface being created, then
 "Starting virtual onvif server for Arlo Front Door on 192.168.40.41:8081"
-and so on, and a TCP proxy from 8554 to the relay. Turn on **Start on
-boot** and **Watchdog**.
+and so on, a TCP proxy from 8554 to the relay, then "ONVIF events at
+http://192.168.40.41:8181/onvif/events_service" for each camera and "MQTT
+connected". Turn on **Start on boot** and **Watchdog**.
 
 Open UniFi Network and confirm three new clients appear with the virtual
 MACs. Giving each a fixed IP in UniFi is optional since they are static
@@ -135,6 +142,27 @@ already, but it stops UniFi flagging them.
    device does not check them.
 3. Rename each camera in Protect to match the real one.
 4. Set the recording mode. Continuous is fine; the stream is always on.
+   "Detections" mode also works, because motion comes from Arlo (next
+   section).
+
+## How motion reaches Protect
+
+Since Protect 7.1, Protect takes motion for third-party cameras from the
+camera's own ONVIF Events service and does no motion detection of its own
+on the video. The bridge therefore runs an Events service per virtual
+camera. When Arlo detects motion, the Streamer publishes it on
+`arlo/motion/<camera>`, the ONVIF add-on turns that into the standard
+`tns1:RuleEngine/CellMotionDetector/Motion` property event (the same shape
+Hikvision cameras send, which Protect is known to accept), and Protect marks
+the timeline, records in Detections mode, and can raise alarms. Smart
+detections (person, vehicle) are not passed through; Protect ignores them
+from third-party cameras.
+
+To check it is flowing, watch the ONVIF add-on log while someone walks past
+a camera: you should see "front_door: motion started" when Arlo reports it
+and a subscription line from Protect's address (192.168.40.1) shortly after
+adoption. If Protect never subscribes, re-adopt the camera after the add-on
+is up, so Protect sees the Events capability.
 
 ## What to expect
 
@@ -146,7 +174,8 @@ already, but it stops UniFi flagging them.
   integration. If Arlo logs one of them out, both add-on and integration
   recover on their own, but you may see a 2FA email.
 - Protect's smart detections do not run on third-party cameras. Motion
-  recording still works.
+  events come from Arlo through the Events service, so motion recording and
+  timeline markers work, with Arlo's own detection zones and sensitivity.
 
 ## Troubleshooting
 
@@ -158,6 +187,8 @@ already, but it stops UniFi flagging them.
 | Protect says the stream is unavailable | From a PC, open `rtsp://192.168.40.41:8554/front_door` in VLC. If that works, re-adopt in Protect. If not, check the relay at `rtsp://192.168.40.7:8555/front_door`. |
 | Stream freezes and never recovers | The keepalive restarts a stream after `stall_seconds` with no bytes. Lower it, or raise `pyaarlo_reconnect_every` to 110 if the Streamer log shows the Arlo event channel going quiet. |
 | Virtual interfaces missing after a reboot | The add-on recreates them every start. If it is not starting on boot, enable Start on boot. |
+| No motion in Protect | ONVIF add-on log: is "MQTT connected" there, and does "motion started" appear when the Arlo app shows motion? If MQTT is fine but Protect shows nothing, re-adopt the camera, then try `emit_motion_alarm: true`. |
+| Motion in Protect never ends | Arlo did not send "motion ended"; `motion_hold_seconds` clears it. Lower it if clips run long. |
 
 ## Removing it
 
