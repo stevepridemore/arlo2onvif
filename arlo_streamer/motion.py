@@ -18,6 +18,8 @@ Environment (set by run.sh from the add-on options):
   MOTION_SENSITIVITY   1..100 (higher = more sensitive), default 50
   MOTION_END_SECONDS   seconds of stillness before "false", default 8
   MOTION_DEBUG         "true" to log the change fraction of every frame
+  MEDIAMTX_API_URL     relay API; used to wait until a stream exists before
+                       starting ffmpeg (optional)
 """
 
 import asyncio
@@ -25,6 +27,8 @@ import json
 import logging
 import os
 import time
+import urllib.error
+import urllib.request
 
 import aiomqtt
 
@@ -36,6 +40,8 @@ log = logging.getLogger("motion")
 
 CAMERAS = [c.strip() for c in os.environ.get("MOTION_CAMERAS", "").split(",") if c.strip()]
 RTSP_BASE = os.environ.get("MOTION_RTSP_URL", "rtsp://127.0.0.1:8554").rstrip("/")
+API_BASE = os.environ.get("MEDIAMTX_API_URL", "").rstrip("/")
+RETRY_SECONDS = 15
 TOPIC = os.environ.get("MOTION_TOPIC", "bridge/motion/{name}")
 SENSITIVITY = max(1, min(100, int(os.environ.get("MOTION_SENSITIVITY", "50") or 50)))
 END_SECONDS = max(1, int(os.environ.get("MOTION_END_SECONDS", "8") or 8))
@@ -56,6 +62,22 @@ GLOBAL_CHANGE = 0.70        # more than this fraction changed = lighting/IR flip
 AREA_THRESHOLD = 0.005 + (100 - SENSITIVITY) / 100 * 0.095
 
 
+def path_ready(name) -> bool:
+    """True if the relay currently has a ready stream on this path.
+    Without an API URL we cannot tell, so assume yes and let ffmpeg try."""
+    if not API_BASE:
+        return True
+    try:
+        with urllib.request.urlopen(f"{API_BASE}/v3/paths/get/{name}", timeout=5) as resp:
+            return bool(json.load(resp).get("ready"))
+    except urllib.error.HTTPError as err:
+        if err.code == 404:
+            return False
+        return True  # API refused us; don't block on it
+    except Exception:
+        return True
+
+
 def changed_fraction(prev: bytes, cur: bytes) -> float:
     changed = 0
     for a, b in zip(prev, cur):
@@ -73,7 +95,17 @@ class CameraMotion:
         self.url = f"{RTSP_BASE}/{name}"
 
     async def run(self):
+        waiting_logged = False
         while True:
+            # Don't start ffmpeg until the relay actually has the stream; this
+            # avoids a connect/404/exit loop while the camera is idle.
+            if not await asyncio.to_thread(path_ready, self.name):
+                if not waiting_logged:
+                    log.info("%s: waiting for the stream to appear on the relay", self.name)
+                    waiting_logged = True
+                await asyncio.sleep(RETRY_SECONDS)
+                continue
+            waiting_logged = False
             try:
                 await self.watch()
             except asyncio.CancelledError:
@@ -82,7 +114,7 @@ class CameraMotion:
                 log.warning("%s: detector error: %s", self.name, err)
             if self.active:
                 await self.set_active(False)
-            await asyncio.sleep(5)
+            await asyncio.sleep(RETRY_SECONDS)
 
     async def watch(self):
         cmd = [
@@ -122,9 +154,12 @@ class CameraMotion:
         except asyncio.TimeoutError:
             log.warning("%s: no frames for 60s, restarting reader", self.name)
         finally:
-            if proc.returncode is None:
-                proc.kill()
+            try:
+                if proc.returncode is None:
+                    proc.kill()
                 await proc.wait()
+            except ProcessLookupError:
+                pass
 
     async def set_active(self, value):
         self.active = value
