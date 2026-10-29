@@ -122,14 +122,11 @@ Defaults are set for this network. Check these before starting:
 | `cameras[].path` | `front_door` ... | Must match the Streamer's camera names. |
 | `cameras[].width/height/framerate/bitrate` | doorbell 1080x1080, yards 1920x1080, 24 fps, 2048 kb/s | Protect only uses these for display. If a stream looks wrong, check the real values in VLC against `rtsp://192.168.40.7:8555/front_door`. |
 
-**Before starting it, turn off Protection mode.** On the add-on's Info tab
-there is a "Protection mode" switch; set it to off. The add-on asks for
-`full_access` so it can set two ARP sysctls on the host (otherwise Protect
-can see the host's MAC for every virtual camera and merge them into one),
-and the Supervisor only grants that with Protection mode off. Creating the
-virtual interfaces themselves needs only NET_ADMIN, which the add-on
-requests outright, so with Protection mode left on the cameras still come
-up but the log warns that the sysctls failed.
+The add-on asks for the NET_ADMIN, NET_RAW and SYS_ADMIN capabilities (the
+first two create the virtual interfaces, the third lets it set two ARP
+sysctls on the host so Protect does not see the host's MAC for every camera
+and merge them into one). Protection mode can stay on; the Supervisor
+grants these from the add-on's own configuration.
 
 Start it. The log should show each `onvifN` interface being created, then
 "Starting virtual onvif server for Arlo Front Door on 192.168.40.41:8081"
@@ -192,8 +189,8 @@ is up, so Protect sees the Events capability.
 |---|---|
 | Streamer log says "No stream available" repeatedly | The camera is offline in Arlo, or Arlo is refusing streams. Open it in the Arlo app once. |
 | Camera stays in `idle` in the Streamer log | Keepalive cannot reach MQTT. Check `mqtt_user`/`mqtt_pass` and that Mosquitto is running. |
-| ONVIF add-on log says "RTNETLINK answers: Operation not permitted" | It cannot create the virtual interfaces. Update to 1.0.1 or later and turn off Protection mode on its Info tab, then start it again. |
-| Every Protect camera shows the same video | The ARP sysctls failed (the ONVIF add-on log says so). Turn off Protection mode on the add-on and restart it. |
+| ONVIF add-on log says "RTNETLINK answers: Operation not permitted" | It cannot create the virtual interfaces. Update to 1.0.1 or later (Add-on Store > Check for updates), then start it again. |
+| Every Protect camera shows the same video | The ARP sysctls failed (the ONVIF add-on log says so). Update to 1.0.3 or later, which remounts /proc/sys to set them. |
 | Protect says the stream is unavailable | From a PC, open `rtsp://192.168.40.41:8554/front_door` in VLC. If that works, re-adopt in Protect. If not, check the relay at `rtsp://192.168.40.7:8555/front_door`. |
 | Stream freezes and never recovers | The keepalive restarts a stream after `stall_seconds` with no bytes. Lower it, or raise `pyaarlo_reconnect_every` to 110 if the Streamer log shows the Arlo event channel going quiet. |
 | Virtual interfaces missing after a reboot | The add-on recreates them every start. If it is not starting on boot, enable Start on boot. |

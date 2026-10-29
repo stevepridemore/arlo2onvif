@@ -1,5 +1,5 @@
 name: "Arlo Bridge 3 - Virtual ONVIF Cameras"
-version: "1.0.2"
+version: "1.0.3"
 slug: arlo_onvif_proxy
 description: "Presents each relayed Arlo stream as its own virtual ONVIF camera (own MAC and IP) so UniFi Protect can adopt it"
 url: "https://github.com/daniela-hase/onvif-server"
@@ -10,14 +10,15 @@ startup: application
 boot: auto
 # Needs the host's network namespace to create the per-camera macvlan
 # interfaces and answer ONVIF discovery. NET_ADMIN/NET_RAW create the
-# interfaces; full_access (only granted when the add-on's Protection mode is
-# switched off) additionally allows the ARP sysctls that keep Protect from
-# merging the cameras.
+# interfaces. SYS_ADMIN lets run.sh remount /proc/sys read-write for the two
+# ARP sysctls that keep Protect from merging the cameras (the Supervisor never
+# runs add-ons privileged, so this is the only way to set them). AppArmor is
+# off because the default profile blocks that remount.
 host_network: true
 privileged:
   - NET_ADMIN
   - NET_RAW
-full_access: true
+  - SYS_ADMIN
 apparmor: false
 options:
   parent_interface: ""
