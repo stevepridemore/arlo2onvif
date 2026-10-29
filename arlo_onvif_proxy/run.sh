@@ -167,7 +167,11 @@ EOF
 
 # --- 3. Run ------------------------------------------------------------------
 cd /app
-node main.js /onvif.yaml &
+if [ "$EVENTS_DEBUG" = "true" ]; then
+    node main.js -d /onvif.yaml &
+else
+    node main.js /onvif.yaml &
+fi
 PIDS+=("$!")
 
 if [ "$EVENTS_ENABLED" = "true" ]; then

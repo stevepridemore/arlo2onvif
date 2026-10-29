@@ -75,5 +75,22 @@ replaceOnce(
     'GetServices closing'
 );
 
+// 3. Log requests that reach the device port but match no service, so we can
+//    see what an NVR is probing for (e.g. events on the wrong port/path).
+replaceOnce(
+    "        } else {\n" +
+    "            response.writeHead(404, {'Content-Type': 'text/plain'});\n" +
+    "            response.write('404 Not Found\\n');\n" +
+    "            response.end();\n" +
+    "        }",
+    "        } else {\n" +
+    "            console.log(`${new Date().toISOString().slice(11, 23)} WARN  unhandled ${request.method} ${action} from ${request.socket.remoteAddress}`);\n" +
+    "            response.writeHead(404, {'Content-Type': 'text/plain'});\n" +
+    "            response.write('404 Not Found\\n');\n" +
+    "            response.end();\n" +
+    "        }",
+    'listen() 404 branch'
+);
+
 fs.writeFileSync(file, src);
 console.log(`patch-upstream: patched ${file}`);
