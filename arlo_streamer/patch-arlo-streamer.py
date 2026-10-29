@@ -102,11 +102,55 @@ PATCHES = [
         "            )\n"
         "        await asyncio.sleep(3)\n"
         "        if self.stream is proc and self.get_state() == 'streaming':\n"
-        "            logging.info(f\"{self.name}: restarting live stream\")\n"
+        "            logging.info(f\"{self.name}: restarting live stream with a fresh Arlo session\")\n"
+        "            await self.event_loop.run_in_executor(None, self._forget_stream)\n"
         "            await self._start_stream()\n"
+        "\n"
+        "    def _forget_stream(self):\n"
+        "        \"\"\"\n"
+        "        Tell Arlo the stream is over and drop pyaarlo's cached stream URL.\n"
+        "        pyaarlo hands back the same URL while it thinks we are still\n"
+        "        streaming, and Arlo's relay rejects a reused access token with 403,\n"
+        "        so every restart must ask for a fresh one.\n"
+        "        \"\"\"\n"
+        "        try:\n"
+        "            self._arlo.stop_stream()\n"
+        "        except Exception as err:\n"
+        "            logging.warning(f\"{self.name}: stop_stream failed: {err}\")\n"
+        "        try:\n"
+        "            with self._arlo._lock:\n"
+        "                self._arlo._local_users.discard('remote')\n"
+        "                self._arlo._stream_url = None\n"
+        "        except Exception:\n"
+        "            pass\n"
         "\n"
         "    async def _stream_timeout(self):",
         "_stream_timeout anchor for _watch_live",
+    ),
+    # 6. Going idle: release the Arlo stream and forget its URL, so a later
+    #    START gets a fresh token and Arlo's own motion detection resumes.
+    (
+        "            case 'idle':\n"
+        "                self.stop_stream()\n"
+        "                asyncio.create_task(self._start_idle_stream())",
+        "            case 'idle':\n"
+        "                self.stop_stream()\n"
+        "                await self.event_loop.run_in_executor(None, self._forget_stream)\n"
+        "                asyncio.create_task(self._start_idle_stream())",
+        "idle state handler",
+    ),
+    # 7. Arlo reports idle while we want to stream: forget before re-requesting.
+    (
+        "        if state == 'idle':\n"
+        "            match self.get_state():\n"
+        "                case 'streaming':\n"
+        "                    await self._start_stream()",
+        "        if state == 'idle':\n"
+        "            match self.get_state():\n"
+        "                case 'streaming':\n"
+        "                    await self.event_loop.run_in_executor(None, self._forget_stream)\n"
+        "                    await self._start_stream()",
+        "on_arlo_state idle/streaming case",
     ),
 ]
 
