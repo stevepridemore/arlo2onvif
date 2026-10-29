@@ -27,10 +27,14 @@ env = {
     "MQTT_PORT": o["mqtt_port"],
     "MQTT_USER": o.get("mqtt_user") or "",
     "MQTT_PASS": o.get("mqtt_pass") or "",
-    # Video is copied as-is; audio is re-encoded to AAC, which Protect accepts.
+    # Video is copied as-is; audio is re-encoded to match what the ONVIF
+    # profile declares (aac by default; g711 = PCM mu-law 8 kHz; none).
     "FFMPEG_OUT": (
-        "-c:v copy -c:a aac -ar 16000 -b:a 32k "
-        f"-f rtsp -rtsp_transport tcp {publish}/{{name}}"
+        "-c:v copy "
+        + {"aac": "-c:a aac -ar 16000 -b:a 32k ",
+           "g711": "-c:a pcm_mulaw -ar 8000 -ac 1 ",
+           "none": "-an "}.get(str(o.get("audio_codec", "aac")).lower(), "-c:a aac -ar 16000 -b:a 32k ")
+        + f"-f rtsp -rtsp_transport tcp {publish}/{{name}}"
     ),
     "MOTION_TIMEOUT": o["motion_timeout"],
     "STATUS_INTERVAL": o["status_interval"],

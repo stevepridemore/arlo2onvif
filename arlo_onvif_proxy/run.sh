@@ -32,6 +32,8 @@ PORT_BASE=$(jq -r '.onvif_port_base' "$OPTIONS")
 EVENTS_BASE=$(jq -r '.events_port_base // 8181' "$OPTIONS")
 EVENTS_ENABLED=$(jq -r '.events_enabled // true' "$OPTIONS")
 SNAP_ENABLED=$(jq -r '.snapshots_enabled // true' "$OPTIONS")
+AUDIO_ENABLED=$(jq -r '.audio_enabled // true' "$OPTIONS")
+AUDIO_ENCODING=$(jq -r '.audio_encoding // "AAC"' "$OPTIONS")
 SNAP_PORT=$(jq -r '.snapshot_port // 8580' "$OPTIONS")
 SNAP_TARGET_PORT=$(jq -r '.snapshot_target_port // 8581' "$OPTIONS")
 COUNT=$(jq '.cameras | length' "$OPTIONS")
@@ -140,6 +142,8 @@ EOF
         cat <<EOF
     name: "${name}"
     uuid: ${uuid}
+    audio: ${AUDIO_ENABLED}
+    audioEncoding: ${AUDIO_ENCODING}
     highQuality:
       rtsp: /${path}
 ${snap_line}

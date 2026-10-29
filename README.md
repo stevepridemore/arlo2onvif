@@ -106,6 +106,7 @@ Supervisor on the box and never shown again.
 | `rtsp_publish_url` | `rtsp://192.168.40.7:8555` (the relay, by the box's LAN IP). |
 | `mediamtx_api_url` | `http://192.168.40.7:9997`. |
 | `cameras` | arlo-streamer names: the Arlo camera name, lower-cased, spaces to underscores. The defaults match "Front Door", "Front Yard" and "Back yard". |
+| `audio_codec` | `aac` (AAC 16 kHz), `g711` (PCM mu-law 8 kHz, the classic ONVIF codec) or `none`. Keep the ONVIF add-on's `audio_encoding` in step with it. |
 
 The rest can stay at their defaults. `motion_timeout` is set high (3600) so
 a motion event cannot knock a camera out of continuous streaming for more
@@ -132,6 +133,7 @@ Defaults are set for this network. Check these before starting:
 | `mediamtx_host` / `mediamtx_rtsp_port` | `192.168.40.7` / `8555` | The relay. |
 | `events_enabled` / `events_port_base` | `true` / `8181` | ONVIF Events service, one port per camera (8181, 8182, 8183). This is how Protect gets motion; see below. |
 | `snapshots_enabled` / `snapshot_port` / `snapshot_target_port` | `true` / `8580` / `8581` | Advertise a real snapshot image per camera (served by the Streamer on LAN port 8581) instead of the placeholder logo, proxied on each virtual IP as port 8580. |
+| `audio_enabled` / `audio_encoding` | `true` / `AAC` | Declare an audio source and encoder in the ONVIF profiles so Protect knows the stream has sound (otherwise it reports no microphone and ignores the audio track). Must match the Streamer's `audio_codec`: `AAC` with `aac`, `G711` with `g711`. |
 | `mqtt_host` / `mqtt_port` / `mqtt_user` / `mqtt_pass` | `192.168.40.7` / `1883` | Mosquitto, by the box's LAN IP (this add-on runs on the host network, so `core-mosquitto` does not resolve). Same `arlo_bridge` user as the Streamer. |
 | `mqtt_motion_topic` | `bridge/motion/{name},arlo/motion/{name}` | Motion sources, comma-separated; `{name}` is the camera `path`. The first is the Streamer's video detector, the second arlo-streamer's relay of Arlo's own events (silent while streaming). Motion is reported while any source says so. |
 | `motion_hold_seconds` | `90` | If Arlo never sends "motion ended", clear it after this long. |
@@ -218,7 +220,12 @@ log); if it never does, re-adopt the camera while the add-on is running.
 - Arlo's cloud still ends every live stream after roughly 30 minutes. The
   Streamer reopens it within seconds; Protect shows a brief gap each time.
 - Video is passed through unchanged (H.264 at whatever the Arlo cloud sends,
-  normally 1080p). Audio is re-encoded to AAC. Timestamps are regenerated
+  normally 1080p at roughly 1 to 1.5 Mbps). The bridge never re-encodes
+  video, so the bitrate and resolution in Protect are whatever Arlo sends;
+  the only way to raise them is in the Arlo app (each camera's Video
+  Settings: Power Management "Best Video", and the quality setting on the
+  Ultras). The `bitrate` numbers in the ONVIF options are labels for
+  Protect, not controls. Audio is re-encoded to AAC. Timestamps are regenerated
   from the wall clock on both ffmpeg stages, because Arlo's relay sends
   backwards timestamp jumps that otherwise kill the stream after a few
   seconds (Streamer 1.0.2 and later).
@@ -248,6 +255,7 @@ log); if it never does, re-adopt the camera while the add-on is running.
 | No motion in Protect | Streamer log: does "motion started" appear when someone walks past? If not, raise `motion_sensitivity` or turn on `motion_debug` to see the change percentages. If the Streamer sees it but the ONVIF log does not, check both add-ons' MQTT settings and that `mqtt_motion_topic` includes `bridge/motion/{name}`. If the ONVIF log sees it but Protect shows nothing, re-adopt the camera, then try `emit_motion_alarm: true`. |
 | Motion fires constantly on one camera | Lower `motion_sensitivity` for now (it is global); the porch fan and swaying branches are the usual causes. Per-camera zones are not implemented. |
 | Camera tiles show a "Virtual ONVIF" logo instead of a picture | Snapshots are off or not reaching Protect. Check `http://192.168.40.7:8581/` lists the cameras with recent times, that the Streamer is on 1.2.0+ and the ONVIF add-on on 1.0.5+, then re-adopt the camera so Protect re-reads the snapshot URL. |
+| No audio in Protect | Protect reads the audio capability at adoption: update the ONVIF add-on to 1.1.0+ and re-adopt the camera. If it still shows no microphone, set `audio_encoding: G711` on the ONVIF add-on and `audio_codec: g711` on the Streamer, restart both, and re-adopt again. |
 | Motion in Protect never ends | Arlo did not send "motion ended"; `motion_hold_seconds` clears it. Lower it if clips run long. |
 
 ## Removing it

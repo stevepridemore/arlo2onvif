@@ -92,5 +92,128 @@ replaceOnce(
     'listen() 404 branch'
 );
 
+// 4. Audio: declare an audio source and encoder in both profiles so the NVR
+//    knows the stream carries sound (Protect shows hasMic=false otherwise).
+replaceOnce(
+    "                    H264: {\n" +
+    "                        GovLength: this.config.highQuality.framerate,\n" +
+    "                        H264Profile: 'Main'\n" +
+    "                    },\n" +
+    "                    SessionTimeout: 'PT1000S'\n" +
+    "                }\n" +
+    "            }\n" +
+    "        ];",
+    "                    H264: {\n" +
+    "                        GovLength: this.config.highQuality.framerate,\n" +
+    "                        H264Profile: 'Main'\n" +
+    "                    },\n" +
+    "                    SessionTimeout: 'PT1000S'\n" +
+    "                },\n" +
+    "                ...this.audioEncoderConfig()\n" +
+    "            }\n" +
+    "        ];",
+    'main profile closing'
+);
+// Schema order is VideoSource, AudioSource, VideoEncoder, AudioEncoder, so the
+// audio source goes in front of each VideoEncoderConfiguration.
+replaceOnce(
+    "                VideoEncoderConfiguration: {\n" +
+    "                    attributes: {\n" +
+    "                        token: 'encoder_hq_config_token'",
+    "                ...this.audioSourceConfig(),\n" +
+    "                VideoEncoderConfiguration: {\n" +
+    "                    attributes: {\n" +
+    "                        token: 'encoder_hq_config_token'",
+    'main profile video encoder'
+);
+replaceOnce(
+    "                    VideoEncoderConfiguration: {\n" +
+    "                        attributes: {\n" +
+    "                            token: 'encoder_lq_config_token'",
+    "                    ...this.audioSourceConfig(),\n" +
+    "                    VideoEncoderConfiguration: {\n" +
+    "                        attributes: {\n" +
+    "                            token: 'encoder_lq_config_token'",
+    'sub profile video encoder'
+);
+replaceOnce(
+    "                        H264: {\n" +
+    "                            GovLength: this.config.lowQuality.framerate,\n" +
+    "                            H264Profile: 'Main'\n" +
+    "                        },\n" +
+    "                        SessionTimeout: 'PT1000S'\n" +
+    "                    }\n" +
+    "                }\n" +
+    "            );",
+    "                        H264: {\n" +
+    "                            GovLength: this.config.lowQuality.framerate,\n" +
+    "                            H264Profile: 'Main'\n" +
+    "                        },\n" +
+    "                        SessionTimeout: 'PT1000S'\n" +
+    "                    },\n" +
+    "                    ...this.audioEncoderConfig()\n" +
+    "                }\n" +
+    "            );",
+    'sub profile closing'
+);
+replaceOnce(
+    "    listen(request, response) {",
+    "    audioSourceConfig() {\n" +
+    "        if (this.config.audio === false) return {};\n" +
+    "        return {\n" +
+    "            AudioSourceConfiguration: {\n" +
+    "                Name: 'AudioSource',\n" +
+    "                UseCount: 2,\n" +
+    "                attributes: { token: 'audio_src_config_token' },\n" +
+    "                SourceToken: 'audio_src_token'\n" +
+    "            }\n" +
+    "        };\n" +
+    "    }\n" +
+    "\n" +
+    "    audioEncoderConfig() {\n" +
+    "        if (this.config.audio === false) return {};\n" +
+    "        const enc = String(this.config.audioEncoding || 'AAC').toUpperCase();\n" +
+    "        return {\n" +
+    "            AudioEncoderConfiguration: {\n" +
+    "                Name: 'AudioEncoder',\n" +
+    "                UseCount: 2,\n" +
+    "                attributes: { token: 'audio_enc_config_token' },\n" +
+    "                Encoding: enc,\n" +
+    "                Bitrate: enc === 'AAC' ? 32 : 64,\n" +
+    "                SampleRate: enc === 'AAC' ? 16 : 8,\n" +
+    "                Multicast: { Address: { Type: 'IPv4', IPv4Address: '0.0.0.0' }, Port: 0, TTL: 0, AutoStart: false },\n" +
+    "                SessionTimeout: 'PT1000S'\n" +
+    "            }\n" +
+    "        };\n" +
+    "    }\n" +
+    "\n" +
+    "    audioConfigs() {\n" +
+    "        return { ...this.audioSourceConfig(), ...this.audioEncoderConfig() };\n" +
+    "    }\n" +
+    "\n" +
+    "    listen(request, response) {",
+    'listen() method start'
+);
+replaceOnce(
+    "                    GetSnapshotUri: (args) => {",
+    "                    GetAudioSources: (args) => {\n" +
+    "                        if (this.config.audio === false) return { AudioSources: [] };\n" +
+    "                        return { AudioSources: [{ attributes: { token: 'audio_src_token' }, Channels: 1 }] };\n" +
+    "                    },\n" +
+    "\n" +
+    "                    GetAudioSourceConfigurations: (args) => {\n" +
+    "                        const a = this.audioConfigs();\n" +
+    "                        return { Configurations: a.AudioSourceConfiguration ? [a.AudioSourceConfiguration] : [] };\n" +
+    "                    },\n" +
+    "\n" +
+    "                    GetAudioEncoderConfigurations: (args) => {\n" +
+    "                        const a = this.audioConfigs();\n" +
+    "                        return { Configurations: a.AudioEncoderConfiguration ? [a.AudioEncoderConfiguration] : [] };\n" +
+    "                    },\n" +
+    "\n" +
+    "                    GetSnapshotUri: (args) => {",
+    'GetSnapshotUri handler'
+);
+
 fs.writeFileSync(file, src);
 console.log(`patch-upstream: patched ${file}`);
