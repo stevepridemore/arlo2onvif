@@ -32,9 +32,13 @@ internet. The virtual cameras are reachable only on the LAN.
 - UniFi Protect 5.0 or newer. The UDM SE is on 7.3.70.
 - The three Arlo cameras on mains power. Battery-only cameras cannot stream
   continuously and will not behave in Protect.
-- An MQTT user for the bridge. In Home Assistant go to Settings > People >
-  Users, add a user such as `arlo_bridge` (not an administrator), and give it
-  a password. The Mosquitto add-on accepts Home Assistant users.
+- An MQTT login for the bridge. Either add a Home Assistant user (Settings >
+  People > Users, not an administrator) or, simpler, add an entry to the
+  Mosquitto add-on's own `logins:` list in its configuration (for example
+  username `mqtt`) and restart Mosquitto. The same login goes into both the
+  Streamer and the ONVIF add-on. A wrong login shows as "code:5" in the
+  Streamer log and "Not authorized" in the ONVIF log, and without it the
+  cameras never start streaming.
 - A Gmail **app password** for the account that receives Arlo's 2FA codes.
   The aarlo integration already uses one; the same IMAP login works here.
   Arlo's 2FA email must be set to that mailbox.
@@ -175,7 +179,13 @@ is up, so Protect sees the Events capability.
 - Arlo's cloud still ends every live stream after roughly 30 minutes. The
   Streamer reopens it within seconds; Protect shows a brief gap each time.
 - Video is passed through unchanged (H.264 at whatever the Arlo cloud sends,
-  normally 1080p). Audio is re-encoded to AAC.
+  normally 1080p). Audio is re-encoded to AAC. Timestamps are regenerated
+  from the wall clock on both ffmpeg stages, because Arlo's relay sends
+  backwards timestamp jumps that otherwise kill the stream after a few
+  seconds (Streamer 1.0.2 and later).
+- After an update or restart of the Streamer, the first stream request per
+  camera may log "failed to find resolution" and fall back to idle; the
+  keepalive starts the real streams within about thirty seconds.
 - Each camera is a second login on the Arlo account, next to the aarlo
   integration. If Arlo logs one of them out, both add-on and integration
   recover on their own, but you may see a 2FA email.
@@ -193,6 +203,8 @@ is up, so Protect sees the Events capability.
 | Every Protect camera shows the same video | The ARP sysctls failed (the ONVIF add-on log says so). Update to 1.0.3 or later, which remounts /proc/sys to set them. |
 | Protect says the stream is unavailable | From a PC, open `rtsp://192.168.40.41:8554/front_door` in VLC. If that works, re-adopt in Protect. If not, check the relay at `rtsp://192.168.40.7:8555/front_door`. |
 | Stream freezes and never recovers | The keepalive restarts a stream after `stall_seconds` with no bytes. Lower it, or raise `pyaarlo_reconnect_every` to 110 if the Streamer log shows the Arlo event channel going quiet. |
+| Protect shows a few seconds of video then "offline", repeatedly | Streamer older than 1.0.2 (timestamp jumps from Arlo's relay). Update it. |
+| The add-on store does not offer an update you know exists | Add-on Store > three dots > Check for updates. If that reports an error, the Supervisor was busy (often building another add-on); wait a minute and try again. |
 | Virtual interfaces missing after a reboot | The add-on recreates them every start. If it is not starting on boot, enable Start on boot. |
 | No motion in Protect | ONVIF add-on log: is "MQTT connected" there, and does "motion started" appear when the Arlo app shows motion? If MQTT is fine but Protect shows nothing, re-adopt the camera, then try `emit_motion_alarm: true`. |
 | Motion in Protect never ends | Arlo did not send "motion ended"; `motion_hold_seconds` clears it. Lower it if clips run long. |
