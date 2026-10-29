@@ -6,14 +6,27 @@ as a virtual ONVIF camera, so Protect records them on the UDM SE alongside
 the G5 Bullet.
 
 ```
-Arlo cloud ──(pyaarlo login, same as the aarlo integration)──┐
-                                                             ▼
-  [2] Streamer ── ffmpeg ──► [1] RTSP Relay (MediaMTX) ──► [3] Virtual ONVIF cameras
-        │  motion + keepalive          :8555                    192.168.40.41/.42/.43
-        └── Mosquitto ── arlo/motion/<cam> ──────────────────────┤ ONVIF + RTSP :8554
-                                                                 │ ONVIF Events :8181+
-                                                                 ▼
-                                                          UniFi Protect (UDM SE)
+ Arlo cameras ──► Arlo cloud (login, 2FA, stream relay with one-time tokens)
+                      │
+                      ▼  pyaarlo, same login as the aarlo integration
+ ┌─ Home Assistant box, 192.168.40.7 ─────────────────────────────────────────┐
+ │                                                                            │
+ │  [2] Streamer ──── ffmpeg ────► [1] RTSP relay ────► [3] Virtual ONVIF     │
+ │   pyaarlo, keepalive,            MediaMTX :8555        cameras             │
+ │   motion detector                API :9997             192.168.40.41/42/43 │
+ │        │                             ▲                 ONVIF :8081-8083    │
+ │        │ reads 1 frame/s ────────────┘                 events :8181-8183   │
+ │        │                                               RTSP proxy :8554    │
+ │        ▼                                                     ▲             │
+ │     Mosquitto (MQTT) ── bridge/motion/<cam>, arlo/motion/<cam> ┘             │
+ │       keepalive START/STOP on arlo/control/<cam>                            │
+ └────────────────────────────────────────────────────────────────────────────┘
+                                                                │
+                                                                ▼
+                                                 UniFi Protect on the UDM SE
+                                                 (192.168.40.1): adopts the three
+                                                 virtual cameras, pulls RTSP,
+                                                 subscribes to ONVIF events
 ```
 
 | Folder | Add-on | Does |
