@@ -51,8 +51,11 @@ echo "Parent interface: $PARENT (/$PREFIX); relay: ${MTX_HOST}:${MTX_PORT}; ${CO
 
 # Make each virtual MAC answer ARP only for its own IP. Without this, Protect
 # can see the host's MAC for every camera and merge them into one.
-if ! sysctl -w net.ipv4.conf.all.arp_ignore=1 net.ipv4.conf.all.arp_announce=2 >/dev/null 2>&1; then
-    echo "WARNING: could not set arp_ignore/arp_announce; if Protect shows the same video for every camera, this is why." >&2
+if sysctl -w net.ipv4.conf.all.arp_ignore=1 net.ipv4.conf.all.arp_announce=2 >/dev/null 2>&1; then
+    echo "ARP sysctls set (arp_ignore=1, arp_announce=2)."
+else
+    echo "WARNING: could not set arp_ignore/arp_announce (needs 'Protection mode' OFF on this add-on)." >&2
+    echo "         If Protect shows the same video for every camera, this is why." >&2
 fi
 
 LINKS=()
@@ -77,7 +80,12 @@ for ((i = 0; i < COUNT; i++)); do
     link="onvif${i}"
 
     ip link del "$link" 2>/dev/null || true
-    ip link add "$link" link "$PARENT" address "$mac" type macvlan mode bridge
+    if ! ip link add "$link" link "$PARENT" address "$mac" type macvlan mode bridge; then
+        echo "ERROR: cannot create virtual interface $link on $PARENT." >&2
+        echo "       The add-on lacks NET_ADMIN. Turn OFF 'Protection mode' on this add-on's Info page," >&2
+        echo "       then start it again (and make sure you are on add-on version 1.0.1 or later)." >&2
+        exit 1
+    fi
     ip addr add "${ip_addr}/${PREFIX}" dev "$link"
     ip link set "$link" up
     LINKS+=("$link")
