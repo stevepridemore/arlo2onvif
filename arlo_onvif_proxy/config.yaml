@@ -1,5 +1,5 @@
 name: "Arlo Bridge 3 - Virtual ONVIF Cameras"
-version: "1.1.0"
+version: "1.2.0"
 slug: arlo_onvif_proxy
 description: "Presents each relayed Arlo stream as its own virtual ONVIF camera (own MAC and IP) so UniFi Protect can adopt it"
 url: "https://github.com/daniela-hase/onvif-server"

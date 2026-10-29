@@ -15,8 +15,10 @@ RUN git clone https://github.com/daniela-hase/onvif-server.git /app \
  && rm -rf /app/.git
 
 WORKDIR /app
-COPY patch-upstream.js events-server.js events-main.js /app/
-RUN node patch-upstream.js /app/src/onvif-server.js
+COPY patch-upstream.js events-server.js events-bridge.js /app/
+RUN node patch-upstream.js /app/src/onvif-server.js /app/main.js \
+ && node --check /app/src/onvif-server.js \
+ && node --check /app/main.js
 
 COPY run.sh /run.sh
 RUN chmod +x /run.sh

@@ -29,7 +29,6 @@ MTX_HOST=$(jq -r '.mediamtx_host' "$OPTIONS")
 MTX_PORT=$(jq -r '.mediamtx_rtsp_port' "$OPTIONS")
 RTSP_PORT=$(jq -r '.rtsp_port' "$OPTIONS")
 PORT_BASE=$(jq -r '.onvif_port_base' "$OPTIONS")
-EVENTS_BASE=$(jq -r '.events_port_base // 8181' "$OPTIONS")
 EVENTS_ENABLED=$(jq -r '.events_enabled // true' "$OPTIONS")
 SNAP_ENABLED=$(jq -r '.snapshots_enabled // true' "$OPTIONS")
 AUDIO_ENABLED=$(jq -r '.audio_enabled // true' "$OPTIONS")
@@ -114,7 +113,6 @@ done
         fps=$(jq -r ".cameras[$i].framerate" "$OPTIONS")
         bitrate=$(jq -r ".cameras[$i].bitrate" "$OPTIONS")
         port=$((PORT_BASE + i))
-        events_port=$((EVENTS_BASE + i))
         cat <<EOF
   - mac: "${mac}"
     ports:
@@ -128,7 +126,6 @@ EOF
         fi
         if [ "$EVENTS_ENABLED" = "true" ]; then
             cat <<EOF
-      events: ${events_port}
     events:
       source: ${path}
 EOF
@@ -171,17 +168,17 @@ EOF
 
 # --- 3. Run ------------------------------------------------------------------
 cd /app
+# The events service runs inside onvif-server (events-bridge.js), on the
+# device port, when EVENTS_MQTT_URL is set. Clear it to disable events.
+if [ "$EVENTS_ENABLED" != "true" ]; then
+    unset EVENTS_MQTT_URL
+fi
 if [ "$EVENTS_DEBUG" = "true" ]; then
     node main.js -d /onvif.yaml &
 else
     node main.js /onvif.yaml &
 fi
 PIDS+=("$!")
-
-if [ "$EVENTS_ENABLED" = "true" ]; then
-    node events-main.js /onvif.yaml &
-    PIDS+=("$!")
-fi
 
 # If any process dies, stop everything so the Supervisor watchdog restarts us.
 wait -n "${PIDS[@]}" || true

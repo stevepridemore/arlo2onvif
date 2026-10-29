@@ -14,8 +14,8 @@ the G5 Bullet.
  │  [2] Streamer ──── ffmpeg ────► [1] RTSP relay ────► [3] Virtual ONVIF     │
  │   pyaarlo, keepalive,            MediaMTX :8555        cameras             │
  │   motion detector,               API :9997             192.168.40.41/42/43 │
- │   snapshots :8581 ◄──────────────────────────────────  ONVIF :8081-8083    │
- │        │                             ▲                 events :8181-8183   │
+ │   snapshots :8581 ◄──────────────────────────────────  ONVIF + events      │
+ │        │                             ▲                   :8081-8083        │
  │        │ reads 1 frame/s ────────────┘                 RTSP proxy :8554    │
  │        │                                               snapshot proxy :8580│
  │        ▼                                                     ▲             │
@@ -131,7 +131,7 @@ Defaults are set for this network. Check these before starting:
 |---|---|---|
 | `parent_interface` | empty (auto) | The box's LAN interface, detected from the default route. Set it only if the log says it could not detect one. |
 | `mediamtx_host` / `mediamtx_rtsp_port` | `192.168.40.7` / `8555` | The relay. |
-| `events_enabled` / `events_port_base` | `true` / `8181` | ONVIF Events service, one port per camera (8181, 8182, 8183). This is how Protect gets motion; see below. |
+| `events_enabled` | `true` | ONVIF Events service on each camera's device port (8081 to 8083, path `/onvif/events_service`). This is how Protect gets motion; see below. `events_port_base` is kept for old configs but no longer used: Protect ignores the advertised events address and posts to the device port, so the service lives there (1.2.0+). |
 | `snapshots_enabled` / `snapshot_port` / `snapshot_target_port` | `true` / `8580` / `8581` | Advertise a real snapshot image per camera (served by the Streamer on LAN port 8581) instead of the placeholder logo, proxied on each virtual IP as port 8580. |
 | `audio_enabled` / `audio_encoding` | `true` / `AAC` | Declare an audio source and encoder in the ONVIF profiles so Protect knows the stream has sound (otherwise it reports no microphone and ignores the audio track). Must match the Streamer's `audio_codec`: `AAC` with `aac`, `G711` with `g711`. |
 | `mqtt_host` / `mqtt_port` / `mqtt_user` / `mqtt_pass` | `192.168.40.7` / `1883` | Mosquitto, by the box's LAN IP (this add-on runs on the host network, so `core-mosquitto` does not resolve). Same `arlo_bridge` user as the Streamer. |
@@ -211,9 +211,12 @@ dusk) is ignored rather than reported as motion.
 
 To check it is flowing, watch the Streamer log for "front_door: motion
 started" when someone walks past, then the ONVIF add-on log for the same,
-then the Protect timeline. Protect subscribes to events shortly after
-adoption (a "subscription ... created" line from 192.168.40.1 in the ONVIF
-log); if it never does, re-adopt the camera while the add-on is running.
+then the Protect timeline. Protect polls each camera about once a minute
+(GetSystemDateAndTime, GetServices, GetProfiles, then the events service) and
+creates a subscription, which shows as a "subscription ... created" line
+from 192.168.40.1 in the ONVIF log. If the log instead shows "unhandled
+POST /onvif/events_service", the add-on is older than 1.2.0, where the
+events service still lived on a separate port that Protect never used.
 
 ## What to expect
 

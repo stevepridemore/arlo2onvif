@@ -223,12 +223,17 @@ class EventsServer {
     }
 
     start() {
+        this.reaper = setInterval(() => this.reap(), 30 * 1000);
+        if (this.opts.attached) {
+            // Requests arrive through onvif-server's HTTP server (device port).
+            this.logger.info(`[${this.opts.cameraName}] ONVIF events at ${this.xaddr} (source ${this.opts.source})`);
+            return;
+        }
         this.server = http.createServer((req, res) => this.handle(req, res));
         this.server.on('error', (err) => this.logger.error(`[${this.opts.cameraName}] events server error: ${err.message}`));
         this.server.listen(this.opts.port, this.opts.hostname, () => {
             this.logger.info(`[${this.opts.cameraName}] ONVIF events at ${this.xaddr} (source ${this.opts.source})`);
         });
-        this.reaper = setInterval(() => this.reap(), 30 * 1000);
     }
 
     /* ---- subscriptions ---- */
@@ -400,7 +405,9 @@ class EventsServer {
         const op = detectOperation(body);
         const messageId = tag(body, 'MessageID');
         const reply = (op, xml) => this.send(res, 200, this.envelope(ACTIONS[op], messageId, xml));
-        this.logger.debug && this.logger.debug(`[${this.opts.cameraName}] events ${op} from ${req.socket.remoteAddress}`);
+        if (typeof this.logger.debug === 'function') {
+            this.logger.debug(`[${this.opts.cameraName}] events ${op} from ${req.socket.remoteAddress}`);
+        }
 
         switch (op) {
             case 'GetServiceCapabilities':

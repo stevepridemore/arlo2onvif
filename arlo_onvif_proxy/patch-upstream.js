@@ -22,11 +22,13 @@ function replaceOnce(anchor, replacement, label) {
 }
 
 // 1. GetCapabilities: add the Events capability block before the Media block.
+//    The events service is served on the device port (Protect posts there
+//    regardless of what is advertised).
 replaceOnce(
     "                        if (args.Category === undefined || args.Category == 'All' || args.Category == 'Media') {",
-    "                        if (this.config.ports.events && (args.Category === undefined || args.Category == 'All' || args.Category == 'Events')) {\n" +
+    "                        if (this.config.events && this.config.events.source && (args.Category === undefined || args.Category == 'All' || args.Category == 'Events')) {\n" +
     "                            response.Capabilities['Events'] = {\n" +
-    "                                XAddr: `http://${this.config.hostname}:${this.config.ports.events}/onvif/events_service`,\n" +
+    "                                XAddr: `http://${this.config.hostname}:${this.config.ports.server}/onvif/events_service`,\n" +
     "                                WSSubscriptionPolicySupport: false,\n" +
     "                                WSPullPointSupport: true,\n" +
     "                                WSPausableSubscriptionManagerInterfaceSupport: false\n" +
@@ -42,9 +44,9 @@ replaceOnce(
     "                        return {\n" +
     "                            Service : [",
     "                    GetServices: (args) => {\n" +
-    "                        let eventsService = this.config.ports.events ? [{\n" +
+    "                        let eventsService = (this.config.events && this.config.events.source) ? [{\n" +
     "                            Namespace : 'http://www.onvif.org/ver10/events/wsdl',\n" +
-    "                            XAddr : `http://${this.config.hostname}:${this.config.ports.events}/onvif/events_service`,\n" +
+    "                            XAddr : `http://${this.config.hostname}:${this.config.ports.server}/onvif/events_service`,\n" +
     "                            Version : { Major : 2, Minor : 5 }\n" +
     "                        }] : [];\n" +
     "                        return {\n" +
@@ -75,14 +77,17 @@ replaceOnce(
     'GetServices closing'
 );
 
-// 3. Log requests that reach the device port but match no service, so we can
-//    see what an NVR is probing for (e.g. events on the wrong port/path).
+// 3. Route the events service through onvif-server's own HTTP server (device
+//    port) and log anything else that matches no service, so we can see what
+//    an NVR is probing for.
 replaceOnce(
     "        } else {\n" +
     "            response.writeHead(404, {'Content-Type': 'text/plain'});\n" +
     "            response.write('404 Not Found\\n');\n" +
     "            response.end();\n" +
     "        }",
+    "        } else if (this.events && (action === '/onvif/events_service' || action.startsWith('/onvif/events/sub/'))) {\n" +
+    "            this.events.handle(request, response);\n" +
     "        } else {\n" +
     "            console.log(`${new Date().toISOString().slice(11, 23)} WARN  unhandled ${request.method} ${action} from ${request.socket.remoteAddress}`);\n" +
     "            response.writeHead(404, {'Content-Type': 'text/plain'});\n" +
@@ -90,6 +95,13 @@ replaceOnce(
     "            response.end();\n" +
     "        }",
     'listen() 404 branch'
+);
+// listen() is handed to http.createServer unbound upstream; bind it so
+// `this.events` is reachable.
+replaceOnce(
+    "        this.server = http.createServer(this.listen);",
+    "        this.server = http.createServer(this.listen.bind(this));",
+    'createServer(listen)'
 );
 
 // 4. Audio: declare an audio source and encoder in both profiles so the NVR
@@ -217,3 +229,20 @@ replaceOnce(
 
 fs.writeFileSync(file, src);
 console.log(`patch-upstream: patched ${file}`);
+
+// ---------------------------------------------------------------------------
+// main.js: attach the events service to each camera when MQTT is configured.
+const mainFile = process.argv[3] || '/app/main.js';
+src = fs.readFileSync(mainFile, 'utf8');
+replaceOnce(
+    "            let server = onvifServer.createServer(onvifConfig, logger);\n" +
+    "            if (server.getHostname()) {",
+    "            let server = onvifServer.createServer(onvifConfig, logger);\n" +
+    "            if (server.getHostname() && process.env.EVENTS_MQTT_URL && onvifConfig.events && onvifConfig.events.source) {\n" +
+    "                server.events = require('./events-bridge').attach(onvifConfig, server, logger);\n" +
+    "            }\n" +
+    "            if (server.getHostname()) {",
+    'main.js createServer'
+);
+fs.writeFileSync(mainFile, src);
+console.log(`patch-upstream: patched ${mainFile}`);
