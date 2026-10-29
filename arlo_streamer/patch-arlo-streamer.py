@@ -36,6 +36,78 @@ PATCHES = [
         "                  '-i', stream, '-c:v', 'copy',",
         "live ffmpeg line",
     ),
+    # 3. Live ffmpeg: always capture stderr (drained by _log_stderr, which
+    #    keeps the last lines), watch the process, and say so at WARNING level
+    #    when Arlo gives no stream.
+    (
+        "                stdin=subprocess.DEVNULL,\n"
+        "                stdout=self.proxy_writer,\n"
+        "                stderr=subprocess.PIPE if DEBUG else subprocess.DEVNULL\n"
+        "                )\n"
+        "\n"
+        "            if DEBUG:\n"
+        "                asyncio.create_task(\n"
+        "                    self._log_stderr(self.stream, 'live_stream')\n"
+        "                    )\n"
+        "        else:\n"
+        "            logging.debug(f\"{self.name}: No stream available.\")",
+        "                stdin=subprocess.DEVNULL,\n"
+        "                stdout=self.proxy_writer,\n"
+        "                stderr=subprocess.PIPE\n"
+        "                )\n"
+        "\n"
+        "            asyncio.create_task(\n"
+        "                self._log_stderr(self.stream, 'live_stream')\n"
+        "                )\n"
+        "            asyncio.create_task(self._watch_live(self.stream))\n"
+        "        else:\n"
+        "            logging.warning(f\"{self.name}: No stream available from Arlo.\")",
+        "live ffmpeg stderr/else block",
+    ),
+    # 4. _log_stderr keeps the last few lines per label for the exit report.
+    (
+        "                line = await stream.stderr.readline()\n"
+        "                if line:\n"
+        "                    logging.debug(\n"
+        "                        f\"{self.name} - {label}: {line.decode().strip()}\"\n"
+        "                        )",
+        "                line = await stream.stderr.readline()\n"
+        "                if line:\n"
+        "                    text = line.decode(errors='replace').strip()\n"
+        "                    if not hasattr(self, '_stderr_tail'):\n"
+        "                        self._stderr_tail = {}\n"
+        "                    tail = self._stderr_tail.setdefault(label, [])\n"
+        "                    tail.append(text)\n"
+        "                    del tail[:-5]\n"
+        "                    logging.debug(\n"
+        "                        f\"{self.name} - {label}: {text}\"\n"
+        "                        )",
+        "_log_stderr line handling",
+    ),
+    # 5. Restart the live ffmpeg if it exits while the camera should stream.
+    (
+        "    async def _stream_timeout(self):",
+        "    async def _watch_live(self, proc):\n"
+        "        \"\"\"\n"
+        "        Restart the live ffmpeg if it exits while we still want to stream\n"
+        "        (Arlo ended the stream, network hiccup, muxer error...).\n"
+        "        \"\"\"\n"
+        "        code = await proc.wait()\n"
+        "        if self.stream is not proc or self.get_state() != 'streaming':\n"
+        "            return\n"
+        "        tail = getattr(self, '_stderr_tail', {}).get('live_stream', [])\n"
+        "        logging.warning(\n"
+        "            f\"{self.name}: live stream ffmpeg exited (code {code}); \"\n"
+        "            f\"last output: {' | '.join(tail[-3:]) or 'none'}\"\n"
+        "            )\n"
+        "        await asyncio.sleep(3)\n"
+        "        if self.stream is proc and self.get_state() == 'streaming':\n"
+        "            logging.info(f\"{self.name}: restarting live stream\")\n"
+        "            await self._start_stream()\n"
+        "\n"
+        "    async def _stream_timeout(self):",
+        "_stream_timeout anchor for _watch_live",
+    ),
 ]
 
 for anchor, replacement, label in PATCHES:
