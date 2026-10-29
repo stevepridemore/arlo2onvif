@@ -120,7 +120,7 @@ Defaults are set for this network. Check these before starting:
 | `cameras[].ip` | `.41`, `.42`, `.43` | Must be outside the UniFi DHCP pool (which starts at `.51`) and unused. |
 | `cameras[].mac` | `a2:a2:a2:a2:a2:a1` to `a3` | Locally administered MACs. Change only if they collide with something. |
 | `cameras[].path` | `front_door` ... | Must match the Streamer's camera names. |
-| `cameras[].width/height/framerate/bitrate` | doorbell 1536x1536, yards 1920x1080, 24 fps, 2048 kb/s | Protect only uses these for display. If a stream looks wrong, check the real values in VLC against `rtsp://192.168.40.7:8555/front_door`. |
+| `cameras[].width/height/framerate/bitrate` | doorbell 1080x1080, yards 1920x1080, 24 fps, 2048 kb/s | Protect only uses these for display. If a stream looks wrong, check the real values in VLC against `rtsp://192.168.40.7:8555/front_door`. |
 
 **Before starting it, turn off Protection mode.** On the add-on's Info tab
 there is a "Protection mode" switch; set it to off. The add-on asks for
