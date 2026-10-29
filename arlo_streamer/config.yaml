@@ -1,0 +1,60 @@
+name: "Arlo Bridge 2 - Streamer"
+version: "1.0.0"
+slug: arlo_streamer
+description: "Logs in to Arlo the same way the aarlo integration does, keeps the wired cameras streaming, and publishes them to the RTSP Relay add-on"
+url: "https://github.com/kaffetorsk/arlo-streamer"
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+services:
+  - mqtt:want
+options:
+  arlo_user: ""
+  arlo_pass: ""
+  imap_host: imap.gmail.com
+  imap_user: ""
+  imap_pass: ""
+  mqtt_host: core-mosquitto
+  mqtt_port: 1883
+  mqtt_user: ""
+  mqtt_pass: ""
+  rtsp_publish_url: rtsp://192.168.40.7:8555
+  mediamtx_api_url: http://192.168.40.7:9997
+  cameras:
+    - front_door
+    - front_yard
+    - back_yard
+  keepalive_interval: 30
+  stall_seconds: 120
+  status_interval: 30
+  motion_timeout: 3600
+  pyaarlo_backend: sse
+  pyaarlo_refresh_devices: 3
+  pyaarlo_stream_timeout: 180
+  pyaarlo_reconnect_every: 0
+  debug: false
+schema:
+  arlo_user: str
+  arlo_pass: password
+  imap_host: str
+  imap_user: str
+  imap_pass: password
+  mqtt_host: str
+  mqtt_port: port
+  mqtt_user: str?
+  mqtt_pass: password?
+  rtsp_publish_url: str
+  mediamtx_api_url: str
+  cameras:
+    - str
+  keepalive_interval: int(5,600)
+  stall_seconds: int(30,3600)
+  status_interval: int(10,600)
+  motion_timeout: int(60,86400)
+  pyaarlo_backend: list(sse|mqtt)
+  pyaarlo_refresh_devices: int(0,24)
+  pyaarlo_stream_timeout: int(0,3600)
+  pyaarlo_reconnect_every: int(0,1440)
+  debug: bool

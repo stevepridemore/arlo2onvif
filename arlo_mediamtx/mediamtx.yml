@@ -1,0 +1,51 @@
+# MediaMTX configuration for the Arlo -> UniFi Protect bridge.
+# Only RTSP (in and out) and the control API are enabled.
+
+logLevel: info
+logDestinations: [stdout]
+
+# Control API, read by the Streamer add-on's keepalive to detect stalled streams.
+api: yes
+apiAddress: :9997
+
+metrics: no
+pprof: no
+playback: no
+moq: no
+
+# No credentials on the streams (LAN only). The API is allowed from the
+# Home Assistant add-on network and the house LAN, not just localhost.
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+  - user: any
+    pass:
+    ips:
+      - 127.0.0.1
+      - "::1"
+      - 172.30.32.0/23
+      - 192.168.40.0/24
+    permissions:
+      - action: api
+
+# RTSP server: arlo-streamer publishes here, the ONVIF proxy reads from here.
+rtsp: yes
+rtspTransports: [tcp]
+rtspEncryption: "no"
+rtspAddress: :8554
+
+rtmp: no
+hls: no
+webrtc: no
+srt: no
+
+# Accept any path name; arlo-streamer publishes one path per camera
+# (front_door, front_yard, back_yard ...).
+paths:
+  all_others:

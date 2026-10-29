@@ -1,0 +1,65 @@
+name: "Arlo Bridge 3 - Virtual ONVIF Cameras"
+version: "1.0.0"
+slug: arlo_onvif_proxy
+description: "Presents each relayed Arlo stream as its own virtual ONVIF camera (own MAC and IP) so UniFi Protect can adopt it"
+url: "https://github.com/daniela-hase/onvif-server"
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+# Needs the host's network namespace to create the per-camera macvlan
+# interfaces and answer ONVIF discovery, and full access for the ARP sysctls.
+host_network: true
+full_access: true
+apparmor: false
+options:
+  parent_interface: ""
+  mediamtx_host: 192.168.40.7
+  mediamtx_rtsp_port: 8555
+  rtsp_port: 8554
+  onvif_port_base: 8081
+  cameras:
+    - name: Arlo Front Door
+      path: front_door
+      mac: "a2:a2:a2:a2:a2:a1"
+      ip: 192.168.40.41
+      uuid: 7c1e2b3a-5f4d-4a6b-9c8d-0e1f2a3b4c5d
+      width: 1536
+      height: 1536
+      framerate: 24
+      bitrate: 2048
+    - name: Arlo Front Yard
+      path: front_yard
+      mac: "a2:a2:a2:a2:a2:a2"
+      ip: 192.168.40.42
+      uuid: 2a9f7e61-3b8c-4d2e-8f1a-6b5c4d3e2f10
+      width: 1920
+      height: 1080
+      framerate: 24
+      bitrate: 2048
+    - name: Arlo Back Yard
+      path: back_yard
+      mac: "a2:a2:a2:a2:a2:a3"
+      ip: 192.168.40.43
+      uuid: 9d4b6c2e-8a1f-4e7b-b3c5-1f2e3d4c5b6a
+      width: 1920
+      height: 1080
+      framerate: 24
+      bitrate: 2048
+schema:
+  parent_interface: str?
+  mediamtx_host: str
+  mediamtx_rtsp_port: port
+  rtsp_port: port
+  onvif_port_base: port
+  cameras:
+    - name: str
+      path: str
+      mac: str
+      ip: str
+      uuid: str
+      width: int
+      height: int
+      framerate: int
+      bitrate: int

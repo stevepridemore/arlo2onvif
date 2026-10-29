@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Entrypoint for the Arlo Bridge Virtual ONVIF Cameras add-on.
+#
+# 1. Creates one macvlan interface per camera on the host's LAN interface,
+#    each with its own MAC and IP, so UniFi Protect sees separate devices.
+# 2. Generates /onvif.yaml from the add-on options.
+# 3. Runs onvif-server, which answers ONVIF discovery on each virtual IP and
+#    proxies RTSP to the MediaMTX relay.
+set -euo pipefail
+
+OPTIONS=/data/options.json
+if [ ! -f "$OPTIONS" ]; then
+    echo "ERROR: $OPTIONS not found; is this running as a Home Assistant add-on?" >&2
+    exit 1
+fi
+
+PARENT=$(jq -r '.parent_interface // ""' "$OPTIONS")
+if [ -z "$PARENT" ]; then
+    PARENT=$(ip -o -4 route show default | awk '{print $5}' | head -n 1)
+fi
+if [ -z "$PARENT" ]; then
+    echo "ERROR: could not detect the LAN interface; set parent_interface in the options." >&2
+    exit 1
+fi
+PREFIX=$(ip -o -4 addr show dev "$PARENT" | awk '{print $4}' | head -n 1 | cut -d/ -f2)
+PREFIX=${PREFIX:-24}
+
+MTX_HOST=$(jq -r '.mediamtx_host' "$OPTIONS")
+MTX_PORT=$(jq -r '.mediamtx_rtsp_port' "$OPTIONS")
+RTSP_PORT=$(jq -r '.rtsp_port' "$OPTIONS")
+PORT_BASE=$(jq -r '.onvif_port_base' "$OPTIONS")
+COUNT=$(jq '.cameras | length' "$OPTIONS")
+
+if [ "$COUNT" -eq 0 ]; then
+    echo "ERROR: no cameras configured." >&2
+    exit 1
+fi
+
+echo "Parent interface: $PARENT (/$PREFIX); relay: ${MTX_HOST}:${MTX_PORT}; ${COUNT} camera(s)"
+
+# Make each virtual MAC answer ARP only for its own IP. Without this, Protect
+# can see the host's MAC for every camera and merge them into one.
+if ! sysctl -w net.ipv4.conf.all.arp_ignore=1 net.ipv4.conf.all.arp_announce=2 >/dev/null 2>&1; then
+    echo "WARNING: could not set arp_ignore/arp_announce; if Protect shows the same video for every camera, this is why." >&2
+fi
+
+LINKS=()
+cleanup() {
+    echo "Removing virtual interfaces..."
+    for link in "${LINKS[@]:-}"; do
+        [ -n "$link" ] && ip link del "$link" 2>/dev/null || true
+    done
+}
+trap 'cleanup; exit 0' TERM INT
+
+# --- 1. Virtual interfaces -------------------------------------------------
+for ((i = 0; i < COUNT; i++)); do
+    name=$(jq -r ".cameras[$i].name" "$OPTIONS")
+    mac=$(jq -r ".cameras[$i].mac" "$OPTIONS" | tr 'A-F' 'a-f')
+    ip_addr=$(jq -r ".cameras[$i].ip" "$OPTIONS")
+    link="onvif${i}"
+
+    ip link del "$link" 2>/dev/null || true
+    ip link add "$link" link "$PARENT" address "$mac" type macvlan mode bridge
+    ip addr add "${ip_addr}/${PREFIX}" dev "$link"
+    ip link set "$link" up
+    LINKS+=("$link")
+    echo "  $link -> $name  $mac  $ip_addr"
+done
+
+# --- 2. onvif-server config --------------------------------------------------
+{
+    echo "onvif:"
+    for ((i = 0; i < COUNT; i++)); do
+        name=$(jq -r ".cameras[$i].name" "$OPTIONS")
+        path=$(jq -r ".cameras[$i].path" "$OPTIONS")
+        mac=$(jq -r ".cameras[$i].mac" "$OPTIONS" | tr 'A-F' 'a-f')
+        uuid=$(jq -r ".cameras[$i].uuid" "$OPTIONS")
+        width=$(jq -r ".cameras[$i].width" "$OPTIONS")
+        height=$(jq -r ".cameras[$i].height" "$OPTIONS")
+        fps=$(jq -r ".cameras[$i].framerate" "$OPTIONS")
+        bitrate=$(jq -r ".cameras[$i].bitrate" "$OPTIONS")
+        port=$((PORT_BASE + i))
+        cat <<EOF
+  - mac: "${mac}"
+    ports:
+      server: ${port}
+      rtsp: ${RTSP_PORT}
+    name: "${name}"
+    uuid: ${uuid}
+    highQuality:
+      rtsp: /${path}
+      width: ${width}
+      height: ${height}
+      framerate: ${fps}
+      bitrate: ${bitrate}
+      quality: 4
+    lowQuality:
+      rtsp: /${path}
+      width: ${width}
+      height: ${height}
+      framerate: ${fps}
+      bitrate: ${bitrate}
+      quality: 1
+    target:
+      hostname: ${MTX_HOST}
+      ports:
+        rtsp: ${MTX_PORT}
+EOF
+    done
+} > /onvif.yaml
+
+# --- 3. Run ------------------------------------------------------------------
+cd /app
+node main.js /onvif.yaml &
+NODE_PID=$!
+wait "$NODE_PID" || true
+cleanup
+exit 1

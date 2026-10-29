@@ -1,0 +1,19 @@
+name: "Arlo Bridge 1 - RTSP Relay"
+version: "1.0.0"
+slug: arlo_mediamtx
+description: "MediaMTX relay that receives the Arlo streams from the Streamer add-on and serves them as plain RTSP for the virtual ONVIF cameras"
+url: "https://github.com/bluenviron/mediamtx"
+arch:
+  - amd64
+  - aarch64
+startup: services
+boot: auto
+init: false
+ports:
+  8554/tcp: 8555
+  9997/tcp: 9997
+ports_description:
+  8554/tcp: "RTSP (exposed on the LAN as 8555 so it does not collide with the ONVIF proxy)"
+  9997/tcp: "MediaMTX control API (used by the Streamer add-on's keepalive)"
+options: {}
+schema: {}

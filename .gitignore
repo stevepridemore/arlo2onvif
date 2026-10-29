@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+# Never commit filled-in add-on options or Arlo session caches
+options.json
+*.env
+.env*
+pyaarlo/
