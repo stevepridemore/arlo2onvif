@@ -7,3 +7,6 @@ options.json
 *.env
 .env*
 pyaarlo/
+
+# Personal camera placement drawings
+docs/
