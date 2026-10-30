@@ -31,6 +31,7 @@ env = {
     # profile declares (aac by default; g711 = PCM mu-law 8 kHz; none).
     "FFMPEG_OUT": (
         "-c:v copy "
+        + (f"-af volume={int(o.get('audio_gain_db', 0) or 0)}dB " if int(o.get("audio_gain_db", 0) or 0) else "")
         + {"aac": "-c:a aac -ar 16000 -b:a 32k ",
            "g711": "-c:a pcm_mulaw -ar 8000 -ac 1 ",
            "none": "-an "}.get(str(o.get("audio_codec", "aac")).lower(), "-c:a aac -ar 16000 -b:a 32k ")

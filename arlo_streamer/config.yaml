@@ -1,5 +1,5 @@
 name: "Arlo Bridge 2 - Streamer"
-version: "1.2.1"
+version: "1.2.2"
 slug: arlo_streamer
 description: "Logs in to Arlo the same way the aarlo integration does, keeps the wired cameras streaming, and publishes them to the RTSP Relay add-on"
 url: "https://github.com/kaffetorsk/arlo-streamer"
@@ -27,6 +27,7 @@ options:
   rtsp_publish_url: rtsp://192.168.40.7:8555
   mediamtx_api_url: http://192.168.40.7:9997
   audio_codec: aac
+  audio_gain_db: 0
   cameras:
     - front_door
     - front_yard
@@ -60,6 +61,7 @@ schema:
   rtsp_publish_url: str
   mediamtx_api_url: str
   audio_codec: list(aac|g711|none)
+  audio_gain_db: int(0,40)
   cameras:
     - str
   video_motion: bool

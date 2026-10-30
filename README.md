@@ -107,6 +107,7 @@ Supervisor on the box and never shown again.
 | `mediamtx_api_url` | `http://192.168.40.7:9997`. |
 | `cameras` | arlo-streamer names: the Arlo camera name, lower-cased, spaces to underscores. The defaults match "Front Door", "Front Yard" and "Back yard". |
 | `audio_codec` | `aac` (AAC 16 kHz), `g711` (PCM mu-law 8 kHz, the classic ONVIF codec) or `none`. Keep the ONVIF add-on's `audio_encoding` in step with it. |
+| `audio_gain_db` | `0`. Arlo microphones are quiet (a quiet night measured around -60 dB mean on the relay). Raise this, 10 to 20 is reasonable, if audio in Protect is too faint. |
 
 The rest can stay at their defaults. `motion_timeout` is set high (3600) so
 a motion event cannot knock a camera out of continuous streaming for more
